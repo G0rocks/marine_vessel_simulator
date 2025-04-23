@@ -49,7 +49,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
             Ok(record) => {
                 // Get start and end coordinates
                 // timestamp = record.get(0).unwrap().parse::<uom::si::f64::Time>().unwrap();
-                coordinates_initial_str = record.get(1).expect("No initial coordinate found"); // .unwrap().parse::<geo::Coord>().unwrap();
+                coordinates_initial_str = string_to_coordinate(record.get(1).expect("No initial coordinate found").to_string()); // .unwrap().parse::<geo::Coord>().unwrap();
                 // coordinates_current = record.get(2).unwrap().parse::<geo::Coord>().unwrap();
                 // coordinates_final = record.get(3).unwrap().parse::<geo::Coord>().unwrap();
                 // cargo_on_board = record.get(4).unwrap().parse::<uom::si::f64::Mass>().unwrap();
@@ -97,7 +97,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
 /// coord_str: The string to convert
 /// Example:
 /// let my_coord: geo::Coord = str_to_coordinate("52.5200,13.4050");
-pub fn str_to_coordinate(coord_string: String) -> geo::Coord {
+pub fn string_to_coordinate(coord_string: String) -> geo::Coord {
     // Remove all spaces in string
     let coord_str_vec: Vec<&str> = coord_string.trim().split(',').collect();
 
