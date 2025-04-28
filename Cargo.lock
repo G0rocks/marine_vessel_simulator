@@ -257,6 +257,7 @@ dependencies = [
  "csv",
  "geo",
  "uom",
+ "year-helper",
 ]
 
 [[package]]
@@ -412,3 +413,9 @@ dependencies = [
  "num-traits",
  "typenum",
 ]
+
+[[package]]
+name = "year-helper"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dceb2673c4ce4173a2bf16bb2df51537f26a038275dc2db37e2c015358d05f3"
