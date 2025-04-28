@@ -22,7 +22,7 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 /// let filename: &str = "../data/mydata.csv";
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
-pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
+pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     (uom::si::f64::Velocity, f64, f64, f64) {
 
     // Read the CSV file
@@ -45,22 +45,22 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
     // let mut coordinates_final: geo::Coord;
     // let mut cargo_on_board: uom::si::f64::Mass;         // weight in tons
 
-    // Iterate through each line of the CSV file to calculate the mean and standard deviation of speed and cargo values
+    // Iterate through each line of the CSV file to calculate the mean and standard deviation of speed and cargo values, using each leg of the trip/s
     for result in csv_reader.records() {
         match result {
-            Ok(record) => {
+            Ok(leg) => {
                 // Get all values in row
-                timestamp = string_to_timestamp(record.get(0).expect("No timestampe found").to_string());
+                timestamp = string_to_timestamp(leg.get(0).expect("No timestampe found").to_string());
                 // Convert the string to a geo::Coord object
-                coordinates_initial_coord = string_to_coordinate(record.get(1).expect("No initial coordinate found").to_string());
-                // coordinates_current = record.get(2).unwrap().parse::<geo::Coord>().unwrap();
-                // coordinates_final = record.get(3).unwrap().parse::<geo::Coord>().unwrap();
-                // cargo_on_board = record.get(4).unwrap().parse::<uom::si::f64::Mass>().unwrap();
+                coordinates_initial_coord = string_to_coordinate(leg.get(1).expect("No initial coordinate found").to_string());
+                // coordinates_current = leg.get(2).unwrap().parse::<geo::Coord>().unwrap();
+                // coordinates_final = leg.get(3).unwrap().parse::<geo::Coord>().unwrap();
+                // cargo_on_board = leg.get(4).unwrap().parse::<uom::si::f64::Mass>().unwrap();
                 // Print the values for debugging
                 // println!("Timestamp: {}", timestamp);
 
                 // Print them
-                println!("Timestamp: {:?}", timestamp);
+                println!("Timestamp woooohooooo: {:?}", timestamp);
                 println!("Coordinates Initial coord: {:?}", coordinates_initial_coord);
 
                 println!("Coordinates Current: {:?}", geo::coord! {
@@ -72,21 +72,14 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
                 // println!("Cargo on Board: {}", cargo_on_board);
                 // Calculate the distance between the coordinates
 
-                println!("{:?}", record);
+                println!("{:?}", leg);
                 break; 
             }
-            // Handle the error if the record cannot be read
+            // Handle the error if the leg cannot be read
             Err(err) => {
-                eprintln!("Error reading record: {}", err);
+                eprintln!("Error reading leg: {}", err);
             }
         }
-    }
-
-    // Check if distance is 0
-    if distance == 0 {
-        // Calculate the distance based on the coordinates
-        // This is a placeholder for the actual distance calculation logic
-        // You would need to implement the logic to calculate the distance based on the coordinates
     }
 
     // Return the values
@@ -95,10 +88,10 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, distance: u64) ->
 
 // Helper functions
 
-/// Converts a string into a geo::Coord object
+/// Converts a string into an uom::si::f64::Time object
 /// coord_str: The string to convert in the format YYYY-MM-DD hh:mm
 /// Example:
-/// let my_coord: geo::Coord = str_to_coordinate("52.5200,13.4050");
+/// let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");
 pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     println!("String to timestamp: {}", time_string);
 
@@ -118,13 +111,10 @@ pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     let hour:   uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::hour>(working_str[11..13].parse::<f64>().expect("Invalid hour"));
     let minute: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::minute>(working_str[14..16].parse::<f64>().expect("Invalid minute"));
 
-    let days: uom::si::f64::Time = days_from_month(month_u8, year_i32);
+    let days: uom::si::f64::Time = days_from_month(month_u8, year_i32) + day;
 
     // Attempt to parse the string into a uom::si::f64::Time object
     let time_out: uom::si::f64::Time = year_uom + days + hour + minute;
-
-    // Print timeout
-    println!("Time out: {:?}", time_out);
     
     // Return
     return time_out;
