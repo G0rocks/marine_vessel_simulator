@@ -5,7 +5,7 @@
 
 /// External crates
 use csv;    // CSV reader to read csv files
-use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
+use uom::{self, si::f32::V};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 
@@ -24,7 +24,7 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, f64, f64, f64) {
+    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>) {
 
     let dist: f64;
 
@@ -45,26 +45,20 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 
     // Initialize variables to store the sum and count of speed and cargo values
     let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
-    let mut cargo_vec: Vec<uom::si::f64::Mass> = Vec::new();
-
-    // Initialize variables to store the sum and count of speed and cargo values
-    let speed_avg = uom::si::f64::Velocity::new::<uom::si::velocity::kilometer_per_hour>(2.0);
-    let speed_std: f64 = 0.0;
-    let cargo_avg: f64 = 0.0;
-    let cargo_std: f64 = 0.0;
+    let mut cargo_vec: Vec<Option<uom::si::f64::Mass>> = Vec::new();
 
     // Init empty csv column variable
     let mut timestamp: uom::si::f64::Time;
     let mut coordinates_initial: geo::Point;
     let mut coordinates_current: geo::Point;
     let mut coordinates_final: geo::Point;
-    // let cargo_on_board_option: Option<uom::si::f64::Mass>;         // weight in tons
-    // let cargo_on_board: uom::si::f64::Mass;         // weight in tons
+    let mut cargo_on_board_option: Option<uom::si::f64::Mass>;         // weight in tons
 
     // Init empty working variables
     let mut dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
     let mut start_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
     let mut travel_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+    let mut cargo_on_trip: Option<uom::si::f64::Mass> = None;
     let mut num_points: u64 = 0;
     let mut num_trips: u64 = 0;
     let mut coordinates_last: geo::Point = geo::Point::new(0.0, 0.0);
@@ -73,7 +67,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     for result in csv_reader.records() {
         match result {
             Ok(leg) => {
-                // Increment the number of points
+                // Increment the number of points on this trip
                 num_points += 1;
 
                 // Get all values in row
@@ -82,7 +76,10 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 coordinates_initial = string_to_point(leg.get(1).expect("No initial coordinate found").to_string());
                 coordinates_current = string_to_point(leg.get(2).expect("No initial coordinate found").to_string());
                 coordinates_final = string_to_point(leg.get(3).expect("No initial coordinate found").to_string());
-                // cargo_on_board_option = string_to_tons(leg.get(4).unwrap().to_string());
+                cargo_on_board_option = string_to_tons(leg.get(4).unwrap().to_string());
+                if cargo_on_board_option.is_some() {
+                    cargo_on_trip = cargo_on_board_option;
+                }
 
                 // If current coord is not inital or final this is a working point,
                 if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
@@ -102,30 +99,15 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_final);
                     // Log travel time
                     travel_time = timestamp - start_time;
+
                     // Add speed and cargo values to speed and cargo vectors
                     speed_vec.push(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(dist.get::<uom::si::length::meter>() / travel_time.get::<uom::si::time::second>()));
-                    // cargo_vec.push(string_to_tons(leg.get(4).expect("No cargo found").to_string()).unwrap());
+                    cargo_vec.push(cargo_on_trip);
                     
                     // Reset distance
-                    // dist = 0.0;
-                    // dist2 = 0.0;
-                }
-
-
-
-                // PRINT VALUES FOR DEBUGGING, REMEMBER TO DELETE
-                println!("Point: {}", num_points);
-                println!("Timestamp: {:?}", timestamp);
-                println!("Coordinates Initial: {:?}", coordinates_initial);
-                println!("Coordinates Current: {:?}", coordinates_current);
-                println!("Coordinates Final: {:?}", coordinates_final);
-                // println!("Cargo on board: {:?}", cargo_on_board_option.unwrap());
-                println!("Distance: {:?}", dist);
-                println!("Speed vector: {:?}", speed_vec);
-
-                // Break if num_points is bigger than 1
-                if num_points > 1 {
-                    break;
+                    dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+                    // Reset cargo
+                    cargo_on_trip = None;
                 }
             }
             // Handle the error if the leg cannot be read
@@ -134,6 +116,28 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             }
         }
     }
+
+
+    // Calculate the mean and standard deviation of the speed and cargo vectors
+    let speed_avg: uom::si::f64::Velocity;
+    let speed_std: uom::si::f64::Velocity;
+    let cargo_avg: Option<uom::si::f64::Mass>;
+    let cargo_std: Option<uom::si::f64::Mass>;
+
+    (speed_avg, speed_std) = get_speed_mean_and_std(&speed_vec);
+    (cargo_avg, cargo_std) = get_weight_mean_and_std(&cargo_vec);
+
+    // PRINT VALUES FOR DEBUGGING, REMEMBER TO DELETE
+    println!("Trips: {}, point {}", num_trips, num_points);
+    // println!("Timestamp: {:?}", timestamp);
+    // println!("Coordinates Initial: {:?}", coordinates_initial);
+    // println!("Coordinates Current: {:?}", coordinates_current);
+    // println!("Coordinates Final: {:?}", coordinates_final);
+    // println!("Cargo on board: {:?}", cargo_on_board_option.unwrap());
+    // println!("Distance: {:?}", dist);
+    println!("Speed vector: {:?}", speed_vec);
+    println!("Cargo vector: {:?}", cargo_vec);
+
 
     // Return the values
     return (speed_avg, speed_std, cargo_avg, cargo_std)
@@ -277,19 +281,87 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
 }
 
 
-/// TODO: Make sure this function is correct
 /// Returns the average and standard deviation of a vector of uom::si::f64::Velocity objects
 /// speed_vec: The vector of uom::si::f64::Velocity objects
 /// Example:
-/// let speed_vec: Vec<uom::si::f64::Velocity> = vec![uom::si::f64::Velocity::new::<uom::si::velocity::kilometer_per_hour>(10.0),
-pub fn get_speed_mean_std(speed_vec: Vec<uom::si::f64::Velocity>) -> (uom::si::f64::Velocity, f64) {
-    todo!();
-    // Calculate the mean and standard deviation of the speed vector
-    // let speed_mean = speed_vec.iter().sum::<uom::si::f64::Velocity>() / speed_vec.len() as f64;
-    // let speed_std = (speed_vec.iter().map(|x| (x - speed_mean).powi(2)).sum::<uom::si::f64::Velocity>() / speed_vec.len() as f64).sqrt();
+/// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
+pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
+    (uom::si::f64::Velocity, uom::si::f64::Velocity) {
+    // Calculate the mean of the speed vector
+    let mut tot_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
 
-    // return (speed_mean, speed_std);
+    // loop through vector, add all values to tot_speed
+    for speed in speed_vec {
+        tot_speed = tot_speed + *speed;
+    }
+    // Find mean
+    let speed_mean: uom::si::f64::Velocity = tot_speed / speed_vec.len() as f64;
+    let speed_mean_f64: f64 = speed_mean.get::<uom::si::velocity::meter_per_second>();
+
+    // Calculate the standard deviation of the speed vector
+    let mut variance: f64 = 0.0;
+
+    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
+    for speed in speed_vec {
+        variance = variance + (speed.get::<uom::si::velocity::meter_per_second>() - speed_mean_f64).powi(2);
+    }
+    variance = variance / ((speed_vec.len() - 1) as f64);
+
+    // Find standard deviation from variance
+    let speed_std: uom::si::f64::Velocity = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(variance.sqrt());
+
+    // Return the mean and standard deviation
+    return (speed_mean, speed_std);
 }
 
+/// TODO: Make sure this function is correct
+/// Returns the average and standard deviation of a vector of Option<uom::si::f64::Mass> objects
+/// cargo_vec: The vector of Option<uom::si::f64::Mass> objects
+/// Example:
+/// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
+pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
+    (Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>) {
+    // Calculate the mean of the vector
+    let mut tot_weight = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(0.0);
+    let mut counter: u64 = 0;
+    let mut useful_weight_vec: Vec<uom::si::f64::Mass> = Vec::new();
+
+    // loop through vector, add all values to tot_weight, count how many have some value
+    for weight in  weight_vec{
+       match weight {
+            // If there is some value, add it to the total, the useful_weight_vec and count it, otherwise do nothing
+            Some(w) => {
+                tot_weight = tot_weight + *w;
+                useful_weight_vec.push(*w);
+                counter += 1;
+            }
+            None => {}
+        };
+    }
+
+    // If there are no values, return None
+    if counter == 0 {
+        return (None, None);
+    }
+
+    // Find mean
+    let weight_mean: uom::si::f64::Mass = tot_weight / counter as f64;
+    let weight_mean_f64: f64 = weight_mean.get::<uom::si::mass::kilogram>();
+
+    // Calculate the standard deviation of the speed vector
+    let mut variance: f64 = 0.0;
+
+    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
+    for weight in useful_weight_vec {
+        variance = variance + (weight.get::<uom::si::mass::kilogram>() - weight_mean_f64).powi(2);
+    }
+    variance = variance / ((counter - 1) as f64);
+
+    // Find standard deviation from variance
+    let weight_std: uom::si::f64::Mass = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(variance.sqrt());
+
+    // Return the mean and standard deviation
+    return (Some(weight_mean), Some(weight_std));
+}
 
 // Set up tests here
