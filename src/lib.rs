@@ -5,7 +5,7 @@
 
 /// External crates
 use csv;    // CSV reader to read csv files
-use uom::{self, si::f32::V};    // Units of measurement. Makes sure that the correct units are used for every calculation
+use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 
@@ -24,7 +24,7 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>) {
+    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, u64) {
 
     let dist: f64;
 
@@ -57,9 +57,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     // Init empty working variables
     let mut dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
     let mut start_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
-    let mut travel_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
     let mut cargo_on_trip: Option<uom::si::f64::Mass> = None;
-    let mut num_points: u64 = 0;
     let mut num_trips: u64 = 0;
     let mut coordinates_last: geo::Point = geo::Point::new(0.0, 0.0);
 
@@ -67,9 +65,6 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     for result in csv_reader.records() {
         match result {
             Ok(leg) => {
-                // Increment the number of points on this trip
-                num_points += 1;
-
                 // Get all values in row
                 timestamp = string_to_timestamp(leg.get(0).expect("No timestampe found").to_string());
                 // Convert the string to a geo::Coord object
@@ -97,11 +92,11 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 else if coordinates_current == coordinates_final {
                     // Add the distance between the last coordinates and the final coordinates  
                     dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_final);
-                    // Log travel time
-                    travel_time = timestamp - start_time;
+                    // Calculate the speed
+                    let speed = dist / (timestamp - start_time);
 
                     // Add speed and cargo values to speed and cargo vectors
-                    speed_vec.push(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(dist.get::<uom::si::length::meter>() / travel_time.get::<uom::si::time::second>()));
+                    speed_vec.push(speed);
                     cargo_vec.push(cargo_on_trip);
                     
                     // Reset distance
@@ -127,20 +122,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     (speed_avg, speed_std) = get_speed_mean_and_std(&speed_vec);
     (cargo_avg, cargo_std) = get_weight_mean_and_std(&cargo_vec);
 
-    // PRINT VALUES FOR DEBUGGING, REMEMBER TO DELETE
-    println!("Trips: {}, point {}", num_trips, num_points);
-    // println!("Timestamp: {:?}", timestamp);
-    // println!("Coordinates Initial: {:?}", coordinates_initial);
-    // println!("Coordinates Current: {:?}", coordinates_current);
-    // println!("Coordinates Final: {:?}", coordinates_final);
-    // println!("Cargo on board: {:?}", cargo_on_board_option.unwrap());
-    // println!("Distance: {:?}", dist);
-    println!("Speed vector: {:?}", speed_vec);
-    println!("Cargo vector: {:?}", cargo_vec);
-
-
     // Return the values
-    return (speed_avg, speed_std, cargo_avg, cargo_std)
+    return (speed_avg, speed_std, cargo_avg, cargo_std, num_trips)
 }
 
 // Helper functions
