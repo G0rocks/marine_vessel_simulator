@@ -6,7 +6,7 @@
 /// External crates
 use csv;    // CSV reader to read csv files
 use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
-use geo;    // Geographical calculations. Used to calculate the distance between two coordinates
+use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 
 
@@ -18,12 +18,23 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 /// Notes:
 /// Timestamps are expected to be in the ISO format of YYYY-MM-DD hh:mm.
 /// Coordinates are expected to be in the format of ISO 6709 using decimal places with a comma between latitude and longitude. "latitude,longitude" (e.g., "52.5200,13.4050") 
+/// The first current coordinate must match the initial coordinate and the last current coordinate must match the final coordinate.
 /// Example:
 /// let filename: &str = "../data/mydata.csv";
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     (uom::si::f64::Velocity, f64, f64, f64) {
+
+    let dist: f64;
+
+    let p1: geo::Point = geo::Point::new(-1.5668581211956627, -48.76584589975404);
+    let p2: geo::Point = geo::Point::new(64.04653073512222, -22.040472086697353);
+
+    dist = geo::Haversine.distance(p1, p2);
+
+    println!("{:?}", dist);
+
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -32,48 +43,90 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
         .from_path(file_path)
         .expect("Failed to open the file");
 
-    // Initialize variables to store the sum and count of speed and cargo values   
+    // Initialize variables to store the sum and count of speed and cargo values
+    let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
+    let mut cargo_vec: Vec<uom::si::f64::Mass> = Vec::new();
+
+    // Initialize variables to store the sum and count of speed and cargo values
     let speed_avg = uom::si::f64::Velocity::new::<uom::si::velocity::kilometer_per_hour>(2.0);
     let speed_std: f64 = 0.0;
     let cargo_avg: f64 = 0.0;
     let cargo_std: f64 = 0.0;
 
     // Init empty csv column variable
-    let timestamp: uom::si::f64::Time;
-    let coordinates_initial_coord: geo::Coord;
-    // let mut coordinates_current: geo::Coord;
-    // let mut coordinates_final: geo::Coord;
-    // let mut cargo_on_board: uom::si::f64::Mass;         // weight in tons
+    let mut timestamp: uom::si::f64::Time;
+    let mut coordinates_initial: geo::Point;
+    let mut coordinates_current: geo::Point;
+    let mut coordinates_final: geo::Point;
+    // let cargo_on_board_option: Option<uom::si::f64::Mass>;         // weight in tons
+    // let cargo_on_board: uom::si::f64::Mass;         // weight in tons
 
-    // Iterate through each line of the CSV file to calculate the mean and standard deviation of speed and cargo values, using each leg of the trip/s
+    // Init empty working variables
+    let mut dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+    let mut start_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+    let mut travel_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+    let mut num_points: u64 = 0;
+    let mut num_trips: u64 = 0;
+    let mut coordinates_last: geo::Point = geo::Point::new(0.0, 0.0);
+
+    // Iterate through each line of the CSV file to calculate the mean and standard deviation of speed and cargo values, using each leg (each leg is 2 points) of the trip/s
     for result in csv_reader.records() {
         match result {
             Ok(leg) => {
+                // Increment the number of points
+                num_points += 1;
+
                 // Get all values in row
                 timestamp = string_to_timestamp(leg.get(0).expect("No timestampe found").to_string());
                 // Convert the string to a geo::Coord object
-                coordinates_initial_coord = string_to_coordinate(leg.get(1).expect("No initial coordinate found").to_string());
-                // coordinates_current = leg.get(2).unwrap().parse::<geo::Coord>().unwrap();
-                // coordinates_final = leg.get(3).unwrap().parse::<geo::Coord>().unwrap();
-                // cargo_on_board = leg.get(4).unwrap().parse::<uom::si::f64::Mass>().unwrap();
-                // Print the values for debugging
-                // println!("Timestamp: {}", timestamp);
+                coordinates_initial = string_to_point(leg.get(1).expect("No initial coordinate found").to_string());
+                coordinates_current = string_to_point(leg.get(2).expect("No initial coordinate found").to_string());
+                coordinates_final = string_to_point(leg.get(3).expect("No initial coordinate found").to_string());
+                // cargo_on_board_option = string_to_tons(leg.get(4).unwrap().to_string());
 
-                // Print them
-                println!("Timestamp woooohooooo: {:?}", timestamp);
-                println!("Coordinates Initial coord: {:?}", coordinates_initial_coord);
+                // If current coord is not inital or final this is a working point,
+                if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
+                    // Add the distance between the coordinates
+                    dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_current);
+                }   // Otherwise, if initial coordinate, the trip just started
+                else if coordinates_current == coordinates_initial {
+                    // Increment the number of trips
+                    num_trips += 1;
+                    // Log start time
+                    start_time = timestamp;
+                    // Set the last coordinates to the initial coordinates
+                    coordinates_last = coordinates_initial;
+                }   // Otherise, if final coordinate, the trip just ended
+                else if coordinates_current == coordinates_final {
+                    // Add the distance between the last coordinates and the final coordinates  
+                    dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_final);
+                    // Log travel time
+                    travel_time = timestamp - start_time;
+                    // Add speed and cargo values to speed and cargo vectors
+                    speed_vec.push(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(dist.get::<uom::si::length::meter>() / travel_time.get::<uom::si::time::second>()));
+                    // cargo_vec.push(string_to_tons(leg.get(4).expect("No cargo found").to_string()).unwrap());
+                    
+                    // Reset distance
+                    // dist = 0.0;
+                    // dist2 = 0.0;
+                }
 
-                println!("Coordinates Current: {:?}", geo::coord! {
-                    x: 40.02f64,
-                    y: 116.34,
-                });
-                // println!("Coordinates Current: {:?}", coordinates_current);
-                // println!("Coordinates Final: {:?}", coordinates_final);
-                // println!("Cargo on Board: {}", cargo_on_board);
-                // Calculate the distance between the coordinates
 
-                println!("{:?}", leg);
-                break; 
+
+                // PRINT VALUES FOR DEBUGGING, REMEMBER TO DELETE
+                println!("Point: {}", num_points);
+                println!("Timestamp: {:?}", timestamp);
+                println!("Coordinates Initial: {:?}", coordinates_initial);
+                println!("Coordinates Current: {:?}", coordinates_current);
+                println!("Coordinates Final: {:?}", coordinates_final);
+                // println!("Cargo on board: {:?}", cargo_on_board_option.unwrap());
+                println!("Distance: {:?}", dist);
+                println!("Speed vector: {:?}", speed_vec);
+
+                // Break if num_points is bigger than 1
+                if num_points > 1 {
+                    break;
+                }
             }
             // Handle the error if the leg cannot be read
             Err(err) => {
@@ -87,14 +140,12 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 }
 
 // Helper functions
-
+//----------------------------------------------------
 /// Converts a string into an uom::si::f64::Time object
-/// coord_str: The string to convert in the format YYYY-MM-DD hh:mm
+/// time_string: The string to convert in the format YYYY-MM-DD hh:mm
 /// Example:
 /// let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");
 pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
-    println!("String to timestamp: {}", time_string);
-
     // Remove all whitespaces in string
     let working_str: &str = (&time_string[..]).trim();
 
@@ -123,7 +174,7 @@ pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
 // Finds out how many days have passed in the year since first of january that year until the beginning of the given month
 fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
     // Check if the month is valid
-    if ((month < 1) || (month > 12)) {
+    if (month < 1) || (month > 12) {
         panic!("Invalid month");
     }
 
@@ -131,7 +182,7 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
     let mut days: u64 = 0;
 
     // for each month, add number of days in month to days
-    for i in (1..month) {
+    for i in 1..month {
         match i {
             1 => days += 31,    // 31 days in January
             2 => days += 28,    // 28 days in February, leap year is handled later
@@ -150,7 +201,7 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
     }
 
     // If leap year and after january and february, add 1 day to February
-    if (year_helper::is_leap_year(year) && (month > 2)) {
+    if year_helper::is_leap_year(year) && (month > 2) {
         days += 1;
     }
 
@@ -158,13 +209,11 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
     return uom::si::f64::Time::new::<uom::si::time::day>(days as f64);
 }
 
-
-
-/// Converts a string into a geo::Coord object
-/// coord_str: The string to convert
+/// Converts a string into a geo::Point object
+/// point_string: The string to convert
 /// Example:
-/// let my_coord: geo::Coord = str_to_coordinate("52.5200,13.4050");
-pub fn string_to_coordinate(coord_string: String) -> geo::Coord {
+/// let my_coord: geo::Point = str_to_coordinate("52.5200,13.4050");
+pub fn string_to_point(coord_string: String) -> geo::Point {
     // Remove all spaces in string
     let coord_str_vec: Vec<&str> = coord_string.trim().split(',').collect();
 
@@ -193,11 +242,53 @@ pub fn string_to_coordinate(coord_string: String) -> geo::Coord {
         latitude -= 180.0;
     }
 
+    // Make return point
+    let return_point = geo::Point::new(longitude, latitude);
+    
+    return return_point;
+}
+
+pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::f64::Length {
+    // Calculate the haversine distance between two points
+    let dist: uom::si::f64::Length = uom::si::length::Length::new::<uom::si::length::meter>(geo::Haversine.distance(p1, p2));
+    return dist;
+}
+
+
+/// Converts a string into a uom::si::f64::Mass object
+/// cargo_string: The string to convert, must be in metric tons (1 metric ton = 1000 kg)
+/// Example:
+/// let my_tons: uom::si::f64::Mass = string_to_tons("500.3");
+pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
+    // Remove all spaces in string
+    let cargo_str: &str = (&cargo_string[..]).trim();
+    
+    // Check if the string is valid
+    if cargo_str.len() == 0 {
+        return None;
+    }
+
+    // Parse the cargo as f64
+    let cargo: f64 = cargo_str.parse::<f64>().expect("Invalid cargo");
+
     // Make return coordinate
-    let return_coord = geo::coord! {
-                                x: latitude,
-                                y: longitude,};
-    return return_coord;
+    let return_cargo: Option<uom::si::f64::Mass> = Some(uom::si::f64::Mass::new::<uom::si::mass::ton>(cargo));
+    return return_cargo;
+}
+
+
+/// TODO: Make sure this function is correct
+/// Returns the average and standard deviation of a vector of uom::si::f64::Velocity objects
+/// speed_vec: The vector of uom::si::f64::Velocity objects
+/// Example:
+/// let speed_vec: Vec<uom::si::f64::Velocity> = vec![uom::si::f64::Velocity::new::<uom::si::velocity::kilometer_per_hour>(10.0),
+pub fn get_speed_mean_std(speed_vec: Vec<uom::si::f64::Velocity>) -> (uom::si::f64::Velocity, f64) {
+    todo!();
+    // Calculate the mean and standard deviation of the speed vector
+    // let speed_mean = speed_vec.iter().sum::<uom::si::f64::Velocity>() / speed_vec.len() as f64;
+    // let speed_std = (speed_vec.iter().map(|x| (x - speed_mean).powi(2)).sum::<uom::si::f64::Velocity>() / speed_vec.len() as f64).sqrt();
+
+    // return (speed_mean, speed_std);
 }
 
 
