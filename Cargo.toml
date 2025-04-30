@@ -1,7 +1,8 @@
 [package]
 name = "marine_vessel_simulator"
 version = "0.1.0"
-license = "GNU GPLv3"
+license = "GPL-3.0-or-later"
+license-file = "LICENSE"
 edition = "2024"
 description = "A simulator for marine vessels and their performance in various conditions."
 repository = "https://github.com/G0rocks/marine_vessel_simulator"
