@@ -6,7 +6,7 @@ license-file = "LICENSE"
 edition = "2024"
 description = "A simulator for marine vessels and their performance in various conditions."
 repository = "https://github.com/G0rocks/marine_vessel_simulator"
-categories = ["simulation", "engineering", "science::geo"]
+categories = ["simulation", "science::geo"]
 keywords = ["engineering", "shipping", "marine", "vessel", "simulation"]
 readme = "README.md"
 
