@@ -4,7 +4,10 @@ version = "0.1.0"
 license = "GNU GPLv3"
 edition = "2024"
 description = "A simulator for marine vessels and their performance in various conditions."
-repository = ""
+repository = "https://github.com/G0rocks/marine_vessel_simulator"
+categories = ["simulation", "engineering", "science::geo"]
+keywords = ["engineering", "shipping", "marine", "vessel", "simulation"]
+readme = "README.md"
 
 [dependencies]
 csv = "1.3.1"
