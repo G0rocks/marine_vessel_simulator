@@ -9,6 +9,66 @@ use uom;    // Units of measurement. Makes sure that the correct units are used 
 use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 
+// Structs and enums
+//----------------------------------------------------
+/// enum of boat propulsion system types
+pub enum BoatPropulsion {
+    Diesel,
+    Electric,
+    Hybrid,
+    Sail,
+    Kite,
+    FlettnerRotor,
+    Nuclear,
+    Other,
+}
+
+
+/// Struct to hold boat metadata
+/// All fields are optional, so that the struct can be created without knowing all the values
+pub struct Boat {
+    pub imo: Option<u32>,
+    pub name: Option<String>,
+    pub length: Option<uom::si::f64::Length>,
+    pub width: Option<uom::si::f64::Length>,
+    pub draft: Option<uom::si::f64::Length>,
+    pub mass: Option<uom::si::f64::Mass>,
+    pub propulsion: Option<BoatPropulsion>,
+    pub velocity_mean: Option<uom::si::f64::Velocity>,
+    pub velocity_std: Option<uom::si::f64::Velocity>,
+    pub cargo_max_capacity: Option<uom::si::f64::Mass>,
+    pub cargo_mean: Option<uom::si::f64::Mass>,
+    pub cargo_std: Option<uom::si::f64::Mass>,
+}
+
+impl Boat {
+    pub fn new() -> Boat {
+        Boat {
+            imo: None,
+            name: None,
+            length: None,
+            width: None,
+            draft: None,
+            mass: None,
+            propulsion: None,
+            velocity_mean: None,
+            velocity_std: None,
+            cargo_max_capacity: None,
+            cargo_mean: None,
+            cargo_std: None,
+        }
+    }
+
+    pub fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_string());
+    }
+}
+
+
+
+
+// Functions
+//----------------------------------------------------
 
 /// This function evaluates the cargo shipping logs from a CSV file and calculates the mean and standard deviation of the speed and cargo delivery values. The CSV file is expected to have the following columns:<br>
 /// timestamp;coordinates_initial;coordinates_current;coordinates_final;cargo_on_board (weight in tons)<br><br>
@@ -25,16 +85,6 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, u64) {
-
-    let dist: f64;
-
-    let p1: geo::Point = geo::Point::new(-1.5668581211956627, -48.76584589975404);
-    let p2: geo::Point = geo::Point::new(64.04653073512222, -22.040472086697353);
-
-    dist = geo::Haversine.distance(p1, p2);
-
-    println!("{:?}", dist);
-
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -235,6 +285,7 @@ pub fn string_to_point(coord_string: String) -> geo::Point {
     return return_point;
 }
 
+/// Calculates the haversine distance between two points and returns the distance in uom::si::f64::Length
 pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::f64::Length {
     // Calculate the haversine distance between two points
     let dist: uom::si::f64::Length = uom::si::length::Length::new::<uom::si::length::meter>(geo::Haversine.distance(p1, p2));
@@ -297,7 +348,6 @@ pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
     return (speed_mean, speed_std);
 }
 
-/// TODO: Make sure this function is correct
 /// Returns the average and standard deviation of a vector of Option<uom::si::f64::Mass> objects
 /// cargo_vec: The vector of Option<uom::si::f64::Mass> objects
 /// Example:
