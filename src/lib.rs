@@ -2,17 +2,19 @@
 /// Author: G0rocks
 /// Date: 2025-04-14
 /// Note that a dimensional anlysis is not performed in this code using uom (https://crates.io/crates/uom)
+/// ## To do
+/// Make another crate, sailplanner, that can make route plans for marine vessels.
 
 /// External crates
 use csv;    // CSV reader to read csv files
 use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
-use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
+use geo::{self, haversine_distance, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 
 // Structs and enums
 //----------------------------------------------------
 /// enum of boat propulsion system types
-pub enum BoatPropulsion {
+pub enum Propulsion {
     Diesel,
     Electric,
     Hybrid,
@@ -29,14 +31,17 @@ pub enum BoatPropulsion {
 pub struct Boat {
     pub imo: Option<u32>,
     pub name: Option<String>,
+    pub location: Option<geo::Point>,
+    pub route_plan: Option<Vec<geo::Point>>,
     pub length: Option<uom::si::f64::Length>,
     pub width: Option<uom::si::f64::Length>,
     pub draft: Option<uom::si::f64::Length>,
     pub mass: Option<uom::si::f64::Mass>,
-    pub propulsion: Option<BoatPropulsion>,
+    pub propulsion: Option<Propulsion>,
     pub velocity_mean: Option<uom::si::f64::Velocity>,
     pub velocity_std: Option<uom::si::f64::Velocity>,
     pub cargo_max_capacity: Option<uom::si::f64::Mass>,
+    pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
 }
@@ -46,6 +51,8 @@ impl Boat {
         Boat {
             imo: None,
             name: None,
+            location: None,
+            route_plan: None,
             length: None,
             width: None,
             draft: None,
@@ -54,6 +61,7 @@ impl Boat {
             velocity_mean: None,
             velocity_std: None,
             cargo_max_capacity: None,
+            cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
             cargo_mean: None,
             cargo_std: None,
         }
@@ -61,6 +69,21 @@ impl Boat {
 
     pub fn set_name(&mut self, name: &str) {
         self.name = Some(name.to_string());
+    }
+
+    pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
+        // Check if the cargo is too heavy
+        match self.cargo_max_capacity {
+            Some(max_capacity) => {
+                if cargo > max_capacity {
+                    panic!("Cargo is too heavy");
+                }
+            }
+            None => {}  // No max capacity set, so do nothing
+        }
+
+        // Set the cargo
+        self.cargo_current = cargo;
     }
 }
 
