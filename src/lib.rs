@@ -107,7 +107,7 @@ impl Boat {
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, u64) {
+    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, uom::si::f64::Time, uom::si::f64::Time, u64) {
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -119,6 +119,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     // Initialize variables to store the sum and count of speed and cargo values
     let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
     let mut cargo_vec: Vec<Option<uom::si::f64::Mass>> = Vec::new();
+    let mut travel_time_vec: Vec<uom::si::f64::Time> = Vec::new();
 
     // Init empty csv column variable
     let mut timestamp: uom::si::f64::Time;
@@ -171,6 +172,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     // Add speed and cargo values to speed and cargo vectors
                     speed_vec.push(speed);
                     cargo_vec.push(cargo_on_trip);
+                    travel_time_vec.push(timestamp - start_time);
                     
                     // Reset distance
                     dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
@@ -186,17 +188,20 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     }
 
 
-    // Calculate the mean and standard deviation of the speed and cargo vectors
+    // Calculate the mean and standard deviation of the speed, cargo and travel time vectors
     let speed_avg: uom::si::f64::Velocity;
     let speed_std: uom::si::f64::Velocity;
     let cargo_avg: Option<uom::si::f64::Mass>;
     let cargo_std: Option<uom::si::f64::Mass>;
+    let travel_time_avg: uom::si::f64::Time;
+    let travel_time_std: uom::si::f64::Time;
 
     (speed_avg, speed_std) = get_speed_mean_and_std(&speed_vec);
     (cargo_avg, cargo_std) = get_weight_mean_and_std(&cargo_vec);
+    (travel_time_avg, travel_time_std) = get_time_mean_and_std(&travel_time_vec);
 
     // Return the values
-    return (speed_avg, speed_std, cargo_avg, cargo_std, num_trips)
+    return (speed_avg, speed_std, cargo_avg, cargo_std, travel_time_avg, travel_time_std, num_trips)
 }
 
 // Helper functions
@@ -419,5 +424,41 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
     // Return the mean and standard deviation
     return (Some(weight_mean), Some(weight_std));
 }
+
+
+/// Returns the average and standard deviation of a vector of uom::si::f64::Time objects
+/// time_vec: The vector of uom::si::f64::Time objects
+/// Example:
+/// let (my_mean, my_std) = get_time_mean_and_std(&my_vec);
+pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
+    (uom::si::f64::Time, uom::si::f64::Time) {
+    // Calculate the mean of the vector
+    let mut tot_time = uom::si::f64::Time::new::<uom::si::time::day>(0.0);
+
+    // loop through vector, add all values to the total
+    for time in time_vec {
+        tot_time = tot_time + *time;
+    }
+    // Find mean
+    let time_mean: uom::si::f64::Time = tot_time / time_vec.len() as f64;
+    let time_mean_f64: f64 = time_mean.get::<uom::si::time::day>();
+
+    // Calculate the standard deviation of the vector
+    let mut variance: f64 = 0.0;
+
+    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
+    for time in time_vec {
+        variance = variance + (time.get::<uom::si::time::day>() - time_mean_f64).powi(2);
+    }
+    variance = variance / ((time_vec.len() - 1) as f64);
+
+    // Find standard deviation from variance
+    let time_std: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::day>(variance.sqrt());
+
+    // Return the mean and standard deviation
+    return (time_mean, time_std);
+}
+
+
 
 // Set up tests here
