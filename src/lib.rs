@@ -10,19 +10,20 @@ use csv;    // CSV reader to read csv files
 use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, haversine_distance, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
+use io;     // To use Result type with Ok and Err
 
 // Structs and enums
 //----------------------------------------------------
 /// enum of boat propulsion system types
 pub enum Propulsion {
     Sail,
-    Diesel,
+    // Diesel,
     // Electric,
     // Hybrid,
     // Kite,
     // FlettnerRotor,
     // Nuclear,
-    Other,
+    // Other,
 }
 
 /// Struct to hold sailing leg data
@@ -31,6 +32,16 @@ pub struct SailingLeg {
     pub p1: geo::Point,
     pub p2: geo::Point,
     pub tacking_width: uom::si::f64::Length,
+}
+
+/// Struct to hold ship long entry
+#[derive(Debug)]
+pub struct ShipLogEntry {
+    pub timestamp: uom::si::f64::Time,
+    pub coordinates_initial: geo::Point,
+    pub coordinates_current: geo::Point,
+    pub coordinates_final: geo::Point,
+    pub cargo_on_board: uom::si::f64::Mass,
 }
 
 /// Enum of simulation methods
@@ -244,20 +255,64 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
-/// TODO: Add what to return, save csv file? Return travel time and more?
-pub fn sim_waypoint_mission(boat: &mut Boat, waypoints: Vec<geo::Point>, time_step: uom::si::f64::Time) {
-    // Check if the boat has a route plan????
+/// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
+pub fn sim_waypoint_mission(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, results_file_path: &str) -> Result<String, io::Error> {
+    // Check if the boat has a route plan, if no route plan
+    if boat.route_plan.is_none() {
+        return Err("No route plan found");
+    }
 
-    // match simulation method
+    // match simulation method and run corresponding simulation function
     match boat.simulation_method {
         Some(SimMethod::ConstVelocity) => {
             // Simulate the boat using constant velocity
-            // sim_const_velocity(boat, waypoints, time_step);
+            sim_const_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, results_file_path: &str);
         }
         // Add other simulation methods here
         _ => panic!("Invalid simulation method"),
     }
 }
+
+
+// Simulators
+//----------------------------------------------------
+/// Simulates the boat using constant velocity
+pub fn sim_waypoint_mission_constanct_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize, results_file_path: &str) -> Result<String, io::Error> {
+    // Set boats current location to the first waypoint
+    boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
+    // Set current leg to 1
+    boat.current_leg = Some(1);
+
+    // Init empty ship log
+    let mut ship_log: Vec<ShipLogEntry> = Vec::new();
+
+    // Loop through each time step
+    for i in [0..max_iterations] {
+        // Simulate the boat moving towards the next waypoint
+        // Get next waypoint
+        let next_waypoint: geo::Point = boat.route_plan.expect("Route plan missing?")[boat.current_leg.unwrap() as usize].p2;
+        // Get distance to next waypoint from current location
+        let dist: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), boat.route_plan.as_ref().expect("Route plan missing?").p2);
+
+        // Get distance traveled in time step
+
+        // While still have some distance left to travel during time step
+            // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
+            // If the boat has reached the last waypoint, stop the simulation
+
+            // Get heading to next waypoint
+            // Get the new location of the boat with distance left to travel during timestep and heading to next waypoint
+
+        // Add the new location to the ship log
+        
+    }
+
+    // Write the results to a CSV file
+}
+
+
+
+
 
 // Helper functions
 //----------------------------------------------------
