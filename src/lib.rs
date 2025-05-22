@@ -25,14 +25,31 @@ pub enum Propulsion {
     Other,
 }
 
+/// Enum of simulation methods
+pub enum Sim_method {
+    /// Constant velocity
+    const_velocity,
+    // Use the mean and std of the boat speed
+    // Mean_and_STD_Velocity,
+    // Use downloaded weather data from file
+    // Weather_data_from_file,
+    // Use the copernicus weather data from the past for the exact location of the boat to simulate the boat movements
+    // Copernicus_Weather_Data,
+    // Use the copernicus weather forecast data for the exact location of the boat to simulate the boat movements
+    // Copernicus_Weather_Forecast,
+}
+
 
 /// Struct to hold boat metadata
 /// All fields are optional, so that the struct can be created without knowing all the values
 pub struct Boat {
     pub imo: Option<u32>,
     pub name: Option<String>,
+    pub min_angle_of_attack: Option<uom::si::f64::Angle>,
     pub location: Option<geo::Point>,
+    pub heading: Option<uom::si::f64::Angle>,
     pub route_plan: Option<Vec<geo::Point>>,
+    pub current_leg: Option<u32>,
     pub length: Option<uom::si::f64::Length>,
     pub width: Option<uom::si::f64::Length>,
     pub draft: Option<uom::si::f64::Length>,
@@ -44,6 +61,7 @@ pub struct Boat {
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
+    pub simulation_method: Option<Sim_method>,
 }
 
 impl Boat {
@@ -51,8 +69,11 @@ impl Boat {
         Boat {
             imo: None,
             name: None,
+            min_angle_of_attack: None,
             location: None,
+            heading: None,
             route_plan: None,
+            current_leg: None,
             length: None,
             width: None,
             draft: None,
@@ -64,6 +85,7 @@ impl Boat {
             cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
             cargo_mean: None,
             cargo_std: None,
+            simulation_method: None,
         }
     }
 
@@ -85,8 +107,48 @@ impl Boat {
         // Set the cargo
         self.cargo_current = cargo;
     }
-}
 
+    /// Function to simulate the boat moving to a new location
+    /// This function takes in the timestep and updates the location of the boat after the timestep
+    pub fn sim_step(&mut self, time_step: uom::si::f64::Time){
+        // Check if the boat has a route plan
+        match self.route_plan {
+            Some(ref route) => {
+                // Check if the boat has a current leg
+                match self.current_leg {
+                    Some(leg) => {
+                        // Check if the leg is valid
+                        if leg >= route.len() as u32 {
+                            panic!("Invalid leg");
+                        }
+
+                        // Get the next point in the route
+                        let next_point = route[leg as usize];
+
+                        // Calculate the distance to the next point
+                        let dist = haversine_distance(self.location.unwrap(), next_point);
+
+                        // Calculate the time it takes to get to the next point
+                        let time = dist / self.velocity_mean.unwrap();
+
+                        // Check if the time is less than the time step
+                        if time < time_step {
+                            // Move to the next point
+                            self.location = Some(next_point);
+                            self.current_leg = Some(leg + 1);
+                        } else {
+                            // Move to a new location based on the velocity and time step
+                            let new_location = self.location.unwrap() + (self.velocity_mean.unwrap() * time_step);
+                            self.location = Some(new_location);
+                        }
+                    }
+                    None => panic!("No current leg set"),
+                }
+            }
+            None => panic!("No route plan set"),
+        }
+    }
+}
 
 
 
