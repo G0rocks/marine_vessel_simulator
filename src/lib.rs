@@ -7,10 +7,10 @@
 
 /// External crates
 use csv;    // CSV reader to read csv files
-use uom;    // Units of measurement. Makes sure that the correct units are used for every calculation
-use geo::{self, haversine_distance, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
+use uom::{self, si::time::day};    // Units of measurement. Makes sure that the correct units are used for every calculation
+use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
-use io;     // To use Result type with Ok and Err
+use std::io; // To use errors
 
 // Structs and enums
 //----------------------------------------------------
@@ -81,6 +81,7 @@ pub struct Boat {
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
     pub simulation_method: Option<SimMethod>,
+    pub ship_log: Vec<ShipLogEntry>,
 }
 
 // Implementation of the Boat struct
@@ -107,6 +108,7 @@ impl Boat {
             cargo_mean: None,
             cargo_std: None,
             simulation_method: None,
+            ship_log: Vec::new(),
         }
     }
 
@@ -256,45 +258,53 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
 /// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
-pub fn sim_waypoint_mission(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, results_file_path: &str) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize) -> Result<String, io::Error> {
     // Check if the boat has a route plan, if no route plan
     if boat.route_plan.is_none() {
-        return Err("No route plan found");
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat has no route plan"));
     }
 
     // match simulation method and run corresponding simulation function
     match boat.simulation_method {
         Some(SimMethod::ConstVelocity) => {
             // Simulate the boat using constant velocity
-            sim_const_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, results_file_path: &str);
+            match sim_waypoint_mission_constant_velocity(boat, start_time, time_step, max_iterations) {
+                Ok(sim_msg) => {
+                    return Ok(sim_msg);
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         }
         // Add other simulation methods here
-        _ => panic!("Invalid simulation method"),
+        // Default case returns error for invalid simulation method
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid simulation method"))
     }
+
+    // Write the results of the ship_log to a CSV file    
 }
 
 
 // Simulators
 //----------------------------------------------------
 /// Simulates the boat using constant velocity
-pub fn sim_waypoint_mission_constanct_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize, results_file_path: &str) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize) -> Result<String, io::Error> {
     // Set boats current location to the first waypoint
     boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
     // Set current leg to 1
     boat.current_leg = Some(1);
 
-    // Init empty ship log
-    let mut ship_log: Vec<ShipLogEntry> = Vec::new();
-
     // Loop through each time step
-    for i in [0..max_iterations] {
+    for _i in [0..max_iterations] {
         // Simulate the boat moving towards the next waypoint
         // Get next waypoint
-        let next_waypoint: geo::Point = boat.route_plan.expect("Route plan missing?")[boat.current_leg.unwrap() as usize].p2;
+        let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[boat.current_leg.unwrap() as usize].p2;
         // Get distance to next waypoint from current location
-        let dist: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), boat.route_plan.as_ref().expect("Route plan missing?").p2);
+        let dist: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
 
         // Get distance traveled in time step
+        let travel_dist: uom::si::f64::Length = boat.velocity_mean.unwrap() * time_step;
 
         // While still have some distance left to travel during time step
             // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
@@ -306,8 +316,9 @@ pub fn sim_waypoint_mission_constanct_velocity(boat: &mut Boat, start_time: uom:
         // Add the new location to the ship log
         
     }
-
-    // Write the results to a CSV file
+    // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
+    // Return the ship log TODO: Move inside for loop
+    return Ok("Simulation completed".to_string());
 }
 
 
@@ -333,11 +344,11 @@ pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     let year_i32:    i32 = working_str[0..4].parse::<i32>().expect("Invalid year");
     let year_uom:   uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(working_str[0..4].parse::<f64>().expect("Invalid year"));
     let month_u8:   u8 = working_str[5..7].parse::<u8>().expect("Invalid month");
-    let day:    uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::day>(working_str[8..10].parse::<f64>().expect("Invalid day"));
+    let day_of_month:    uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::day>(working_str[8..10].parse::<f64>().expect("Invalid day"));
     let hour:   uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::hour>(working_str[11..13].parse::<f64>().expect("Invalid hour"));
     let minute: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::minute>(working_str[14..16].parse::<f64>().expect("Invalid minute"));
 
-    let days: uom::si::f64::Time = days_from_month(month_u8, year_i32) + day;
+    let days: uom::si::f64::Time = days_from_month(month_u8, year_i32) + day_of_month;
 
     // Attempt to parse the string into a uom::si::f64::Time object
     let time_out: uom::si::f64::Time = year_uom + days + hour + minute;
@@ -345,6 +356,33 @@ pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     // Return
     return time_out;
 }
+
+/// Converts a time_stamp to a string in the format YYYY-MM-DD hh:mm
+pub fn timestamp_to_string(time_stamp: uom::si::f64::Time) -> String {
+    // Get the year and day from the time_stamp
+    let year: i32 = time_stamp.get::<uom::si::time::year>() as i32;
+    let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_stamp.get::<uom::si::time::year>() - (year as f64));
+
+    let day_of_year: u16 = time_left.get::<uom::si::time::day>() as u16;
+
+    // Find the month from the day and year (if it's a leap year)
+    let (month, day_of_month): (u8, u16) = month_from_day(day_of_year, year);
+
+    // Find hour
+    let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_left.get::<uom::si::time::day>() - (day_of_year as f64));
+    let hour: u8 = time_left.get::<uom::si::time::hour>() as u8;
+
+    // Find minute
+    let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_left.get::<uom::si::time::hour>() - (hour as f64));
+    let minute: u8 = time_left.get::<uom::si::time::minute>() as u8;
+
+    // Format the string
+    let time_string: String = format!("{:04}-{:02}-{:02} {:02}:{:02}", year, month, day_of_month, hour, minute);
+
+    // return string
+    return time_string;
+}
+
 
 // Finds out how many days have passed in the year since first of january that year until the beginning of the given month
 fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
@@ -382,6 +420,56 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
 
     // Return the number of days
     return uom::si::f64::Time::new::<uom::si::time::day>(days as f64);
+}
+
+/// Finds out which month of the year it is given the day number and year (in case it is a leap year)
+pub fn month_from_day(day_of_year: u16, year: i32) -> (u8, u16) {
+    let mut days_left: u16 = day_of_year;
+
+    // Check if the day is valid
+    if (days_left < 1) || (days_left > 366) {
+        panic!("Invalid day");
+    }
+
+
+    // Init month
+    let mut month: u8 = 0;
+
+    // Leap year check
+    let is_leap_year: bool = year_helper::is_leap_year(year);
+
+    // for each month, subtract number of days in month from day
+    for i in 1..=12 {
+        match i {
+            1 => if days_left <= 31 {
+                month = i; break;
+                } else {
+                    days_left -= 31;
+                }
+            2 => if (is_leap_year && days_left <= 29) || (!is_leap_year && days_left <= 28) {
+                month = i; break;
+                } else {
+                    if is_leap_year {
+                        days_left -= 29;
+                    } else {
+                        days_left -= 28;
+                    }
+                }
+            3 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
+            4 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
+            5 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
+            6 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
+            7 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
+            8 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
+            9 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
+            10 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
+            11 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
+            _ => if days_left <= 31 { month = i; break; } else {}
+        }
+    }
+
+    // Return the month and how many days are left
+    return (month, days_left);
 }
 
 /// Converts a string into a geo::Point object
@@ -625,5 +713,29 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
     return route_plan;
 }
 
+
+/// Function that writes the ship logs to a CSV file
+pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Error> {
+    // Create a CSV writer
+    let mut wtr = csv::Writer::from_path(csv_file_path)?;
+
+    // Write the header
+    wtr.write_record(&["timestamp", "coordinates_initial", "coordinates_current", "coordinates_final", "cargo_on_board"])?;
+
+    // Write the ship log entries
+    for entry in boat.ship_log.iter() {
+        wtr.write_record(&[
+            timestamp_to_string(entry.timestamp),
+            format!("{},{}", entry.coordinates_initial.y(), entry.coordinates_initial.x()),
+            format!("{},{}", entry.coordinates_current.y(), entry.coordinates_current.x()),
+            format!("{},{}", entry.coordinates_final.y(), entry.coordinates_final.x()),
+            entry.cargo_on_board.get::<uom::si::mass::ton>().to_string(),
+        ])?;
+    }
+
+    // Flush and close the writer
+    wtr.flush()?;
+    Ok(())
+}
 
 // Set up tests here
