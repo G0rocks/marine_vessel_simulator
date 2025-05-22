@@ -7,8 +7,8 @@
 
 /// External crates
 use csv;    // CSV reader to read csv files
-use uom::{self, si::time::day};    // Units of measurement. Makes sure that the correct units are used for every calculation
-use geo::{self, Distance};    // Geographical calculations. Used to calculate the distance between two coordinates
+use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
+use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::io; // To use errors
 
@@ -26,6 +26,116 @@ pub enum Propulsion {
     // Other,
 }
 
+/// Struct to hold timestamps in a way that makes it easier to work with than uom::si::f64::Time in Huldars opinion
+#[derive(Debug)]
+pub struct Timestamp {
+    pub year: u16,
+    pub month: u8,
+    pub day: u16,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+}
+
+impl Timestamp {
+    /// Creates a new timestamp
+    pub fn new(year: u16, month: u8, day: u16, hour: u8, minute: u8, second: u8) -> Timestamp {
+        Timestamp {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        let time_string: String = format!("{:04}-{:02}-{:02} {:02}:{:02}", self.year, self.month, self.day, self.hour, self.minute);
+        return time_string;
+    }
+
+    /// Adds days to the timestamp
+    pub fn add_days(&self, days: f64) -> Timestamp{
+        let mut temp_timestamp: Timestamp = Timestamp::new(self.year, self.month, self.day, self.hour, self.minute, self.second);
+        let mut whole_days_left = days as u64;
+        let day_fraction = days - days.floor();
+        let mut whole_hours_left = (day_fraction * 24.0) as u64;
+        let hour_fraction = day_fraction * 24.0 - whole_hours_left as f64;
+        let mut whole_minutes_left = (hour_fraction * 60.0) as u64;
+        let minute_fraction = hour_fraction * 60.0 - whole_minutes_left as f64;
+        let mut whole_seconds_left = (minute_fraction * 60.0) as u64;
+        
+        // Add the seconds
+        while whole_seconds_left > 0 {
+            temp_timestamp.second += 1;
+            whole_seconds_left -= 1;
+            if temp_timestamp.second > 59 {
+                temp_timestamp.second = 0;
+                whole_minutes_left += 1;
+            }
+        }
+
+        
+        // Add the minutes
+        while whole_minutes_left > 0 {
+            temp_timestamp.minute += 1;
+            whole_minutes_left -= 1;
+            if temp_timestamp.minute > 59 {
+                temp_timestamp.minute = 0;
+                whole_hours_left += 1;
+            }
+        }
+
+        // Add the hours
+        while whole_hours_left > 0 {
+            temp_timestamp.hour += 1;
+            whole_hours_left -= 1;
+            if temp_timestamp.hour > 23 {
+                temp_timestamp.hour = 0;
+                whole_days_left += 1;
+            }
+        }
+
+        // While days are left, increment the timestamp
+        while whole_days_left > 0 {
+            temp_timestamp.day += 1;
+            whole_days_left -= 1;
+            // Check if the day is valid
+            match temp_timestamp.month {
+                // 31 day month?
+                1 | 3 | 5 | 7 | 8 | 10 | 12 => {
+                    if temp_timestamp.day > 31 {
+                        temp_timestamp.day = 1;
+                        temp_timestamp.month += 1;
+                    }
+                }
+                // 30 day month?
+                4 | 6 | 9 | 11 => {
+                    if temp_timestamp.day > 30 {
+                        temp_timestamp.day = 1;
+                        temp_timestamp.month += 1;
+                    }
+                }
+                // February?
+                2 => {
+                    if year_helper::is_leap_year(temp_timestamp.year as i32) && temp_timestamp.day > 29 {
+                        temp_timestamp.day = 1;
+                        temp_timestamp.month += 1;
+                    } else if !year_helper::is_leap_year(temp_timestamp.year as i32) && temp_timestamp.day > 28 {
+                        temp_timestamp.day = 1;
+                        temp_timestamp.month += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        return temp_timestamp
+
+    }
+}
+
+
 /// Struct to hold sailing leg data
 #[derive(Debug)]
 pub struct SailingLeg {
@@ -37,7 +147,7 @@ pub struct SailingLeg {
 /// Struct to hold ship long entry
 #[derive(Debug)]
 pub struct ShipLogEntry {
-    pub timestamp: uom::si::f64::Time,
+    pub timestamp: Timestamp,
     pub coordinates_initial: geo::Point,
     pub coordinates_current: geo::Point,
     pub coordinates_final: geo::Point,
@@ -66,7 +176,7 @@ pub struct Boat {
     pub name: Option<String>,
     pub min_angle_of_attack: Option<uom::si::f64::Angle>,
     pub location: Option<geo::Point>,
-    pub heading: Option<uom::si::f64::Angle>,
+    pub bearing: Option<uom::si::f64::Angle>,   //  North: 0°, East: 90°, South: 180°, West: 270°
     pub route_plan: Option<Vec<SailingLeg>>,
     pub current_leg: Option<u32>,
     pub length: Option<uom::si::f64::Length>,
@@ -93,7 +203,7 @@ impl Boat {
             name: None,
             min_angle_of_attack: None,
             location: None,
-            heading: None,
+            bearing: None,
             route_plan: None,
             current_leg: None,
             length: None,
@@ -130,14 +240,7 @@ impl Boat {
         // Set the cargo
         self.cargo_current = cargo;
     }
-
-    /// Function to simulate the boat moving to a new location
-    /// This function takes in the timestep and updates the location of the boat after the timestep
-    pub fn sim_step(&mut self, time_step: uom::si::f64::Time){
-        todo!();
-    }
 }
-
 
 
 // Functions
@@ -258,7 +361,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
 /// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
-pub fn sim_waypoint_mission(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission(boat: &mut Boat, start_time: Timestamp, time_step: f64, max_iterations: usize) -> Result<String, io::Error> {
     // Check if the boat has a route plan, if no route plan
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat has no route plan"));
@@ -280,45 +383,119 @@ pub fn sim_waypoint_mission(boat: &mut Boat, start_time: uom::si::f64::Time, tim
         // Add other simulation methods here
         // Default case returns error for invalid simulation method
         _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid simulation method"))
-    }
-
-    // Write the results of the ship_log to a CSV file    
+    } 
 }
 
 
 // Simulators
 //----------------------------------------------------
 /// Simulates the boat using constant velocity
-pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: uom::si::f64::Time, time_step: uom::si::f64::Time, max_iterations: usize) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Timestamp, time_step: f64, max_iterations: usize) -> Result<String, io::Error> {
     // Set boats current location to the first waypoint
     boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
     // Set current leg to 1
     boat.current_leg = Some(1);
+    // Get total number of legs
+    let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
+
+    // Init travel_dist
+    let mut travel_dist: uom::si::f64::Length;
+
+    // Init ship_log_entry
+    // Get initial location
+    let coordinates_initial = boat.location.unwrap();
+    // Get final location to last waypoint
+    let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
+    let new_log_entry: ShipLogEntry = ShipLogEntry {
+        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
+        coordinates_initial: coordinates_initial,
+        coordinates_current: coordinates_initial,
+        coordinates_final: coordinates_final,
+        cargo_on_board: boat.cargo_current,
+    };
+    // Push first ship log entry
+    boat.ship_log.push(new_log_entry);
 
     // Loop through each time step
-    for _i in [0..max_iterations] {
+    for i in 0..max_iterations {
         // Simulate the boat moving towards the next waypoint
-        // Get next waypoint
-        let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[boat.current_leg.unwrap() as usize].p2;
-        // Get distance to next waypoint from current location
-        let dist: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
-
         // Get distance traveled in time step
-        let travel_dist: uom::si::f64::Length = boat.velocity_mean.unwrap() * time_step;
+        // travel_dist = boat.velocity_mean.unwrap() * time_step;
+        travel_dist = boat.velocity_mean.unwrap() * uom::si::f64::Time::new::<uom::si::time::day>(time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
 
         // While still have some distance left to travel during time step
+        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
+
+            // Get next waypoint
+            let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+            // Get distance to next waypoint from current location
+            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+
             // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
-            // If the boat has reached the last waypoint, stop the simulation
+            if travel_dist > dist_to_next_waypoint {
+                // Move to next waypoint
+                boat.location = Some(next_waypoint);
 
-            // Get heading to next waypoint
-            // Get the new location of the boat with distance left to travel during timestep and heading to next waypoint
+                // If the boat has reached the last waypoint, stop the simulation
+                if boat.location.unwrap() == coordinates_final {
+                    // Update ship logs with last point
+                    let new_log_entry: ShipLogEntry = ShipLogEntry {
+                        // Set timestamp to last shiplogentry + time step
+                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
+                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
+                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
+                        coordinates_initial: coordinates_initial,
+                        coordinates_current: boat.location.unwrap(),
+                        coordinates_final: coordinates_final,
+                        cargo_on_board: boat.cargo_current,
+                    };
 
-        // Add the new location to the ship log
-        
-    }
+                    // Push the new log entry to the ship log
+                    boat.ship_log.push(new_log_entry);
+
+                    // Stop the simulation
+                    return Ok("Simulation completed".to_string());
+                }
+
+                // Update current leg number
+                boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+                // Reduce travel distance by distance to next waypoint
+                travel_dist = travel_dist - dist_to_next_waypoint;
+            }
+            // Otherwise, move boat towards next waypoint and log to ship_log
+            else {
+                // Get bearing to next waypoint
+                let bearing = Haversine.bearing(boat.location.unwrap(), next_waypoint);
+
+                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
+                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+
+                // Update the location of the boat
+                boat.location = Some(new_location);
+
+                // Log the new location to the ship log
+                let new_log_entry: ShipLogEntry = ShipLogEntry {
+                    timestamp: start_time.add_days(((i + 1) as f64)*time_step),
+                    // timestamp: start_time + ((i + 1) as f64)*time_step,
+                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
+                    coordinates_initial: coordinates_initial,
+                    coordinates_current: boat.location.unwrap(),
+                    coordinates_final: coordinates_final,
+                    cargo_on_board: boat.cargo_current,
+                    };
+
+                // Push the new log entry to the ship log
+                boat.ship_log.push(new_log_entry);
+
+                // Set travel distance to zero for next loop
+                travel_dist = travel_dist - travel_dist;
+            }
+        } // End while loop
+    } // End for loop
+
     // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
     // Return the ship log TODO: Move inside for loop
-    return Ok("Simulation completed".to_string());
+    return Ok("Maximized number of iterations. Stopping simulation".to_string());
 }
 
 
@@ -363,18 +540,18 @@ pub fn timestamp_to_string(time_stamp: uom::si::f64::Time) -> String {
     let year: i32 = time_stamp.get::<uom::si::time::year>() as i32;
     let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_stamp.get::<uom::si::time::year>() - (year as f64));
 
-    let day_of_year: u16 = time_left.get::<uom::si::time::day>() as u16;
+    let day_of_year: u16 = 1 + time_left.get::<uom::si::time::day>() as u16;
 
     // Find the month from the day and year (if it's a leap year)
     let (month, day_of_month): (u8, u16) = month_from_day(day_of_year, year);
 
     // Find hour
     let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_left.get::<uom::si::time::day>() - (day_of_year as f64));
-    let hour: u8 = time_left.get::<uom::si::time::hour>() as u8;
+    let hour: u16 = time_left.get::<uom::si::time::hour>() as u16;
 
     // Find minute
     let time_left: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(time_left.get::<uom::si::time::hour>() - (hour as f64));
-    let minute: u8 = time_left.get::<uom::si::time::minute>() as u8;
+    let minute: u16 = time_left.get::<uom::si::time::minute>() as u16;
 
     // Format the string
     let time_string: String = format!("{:04}-{:02}-{:02} {:02}:{:02}", year, month, day_of_month, hour, minute);
@@ -426,47 +603,84 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
 pub fn month_from_day(day_of_year: u16, year: i32) -> (u8, u16) {
     let mut days_left: u16 = day_of_year;
 
+    println!("Day of year: {}", days_left);
+
     // Check if the day is valid
-    if (days_left < 1) || (days_left > 366) {
+    if days_left > 366 {
         panic!("Invalid day");
     }
 
-
     // Init month
-    let mut month: u8 = 0;
+    let month: u8;
 
     // Leap year check
     let is_leap_year: bool = year_helper::is_leap_year(year);
 
-    // for each month, subtract number of days in month from day
-    for i in 1..=12 {
-        match i {
-            1 => if days_left <= 31 {
-                month = i; break;
-                } else {
-                    days_left -= 31;
-                }
-            2 => if (is_leap_year && days_left <= 29) || (!is_leap_year && days_left <= 28) {
-                month = i; break;
-                } else {
-                    if is_leap_year {
-                        days_left -= 29;
-                    } else {
-                        days_left -= 28;
-                    }
-                }
-            3 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
-            4 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
-            5 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
-            6 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
-            7 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
-            8 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
-            9 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
-            10 => if days_left <= 31 { month = i; break; } else { days_left -= 31; }
-            11 => if days_left <= 30 { month = i; break; } else { days_left -= 30; }
-            _ => if days_left <= 31 { month = i; break; } else {}
+    // match through the number of days
+    match days_left {
+        1..=31 => {
+            month = 1; // January
+        }
+        32..=59 => {
+            month = 2; // February
+            days_left -= 31; // January has 31 days
+        }
+        60..=90 => {
+            // if leap year, day 60 is 29th of February
+            if is_leap_year && days_left == 60 {
+                month = 2; // February
+            } else {
+                month = 3; // March
+            }
+            days_left -= 59;    // remove days in previous months of a normal year
+        }
+        91..=120 => {
+            month = 4; // April
+            days_left -= 90;
+        }
+        121..=151 => {
+            month = 5; // May
+            days_left -= 120;
+        }
+        152..=181 => {
+            month = 6; // June
+            days_left -= 151;
+        }
+        182..=212 => {
+            month = 7; // July
+            days_left -= 181;
+        }
+        213..=243 => {
+            month = 8; // August
+            days_left -= 212;
+        }
+        244..=273 => {
+            month = 9; // September
+            days_left -= 243;
+        }
+        274..=304 => {
+            month = 10; // October
+            days_left -= 273;
+        }
+        305..=334 => {
+            month = 11; // November
+            days_left -= 304;
+        }
+        335..=366 => {
+            month = 12; // December
+            days_left -= 334;
+        }
+        _ => {
+            panic!("Invalid day");
         }
     }
+
+    // If month is big enough and it's a leap year, subtract 1 day from days left
+    if is_leap_year && month > 2 {
+        days_left -= 1; // Leap year, add one day to February
+    }
+
+    println!("Month: {}, Day of month : {}", month, days_left);
 
     // Return the month and how many days are left
     return (month, days_left);
@@ -725,7 +939,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
     // Write the ship log entries
     for entry in boat.ship_log.iter() {
         wtr.write_record(&[
-            timestamp_to_string(entry.timestamp),
+            entry.timestamp.to_string(), // timestamp_to_string(entry.timestamp),
             format!("{},{}", entry.coordinates_initial.y(), entry.coordinates_initial.x()),
             format!("{},{}", entry.coordinates_current.y(), entry.coordinates_current.x()),
             format!("{},{}", entry.coordinates_final.y(), entry.coordinates_final.x()),
