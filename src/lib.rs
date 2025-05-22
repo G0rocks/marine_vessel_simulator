@@ -15,20 +15,28 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 //----------------------------------------------------
 /// enum of boat propulsion system types
 pub enum Propulsion {
-    Diesel,
-    Electric,
-    Hybrid,
     Sail,
-    Kite,
-    FlettnerRotor,
-    Nuclear,
+    Diesel,
+    // Electric,
+    // Hybrid,
+    // Kite,
+    // FlettnerRotor,
+    // Nuclear,
     Other,
 }
 
+/// Struct to hold sailing leg data
+#[derive(Debug)]
+pub struct SailingLeg {
+    pub p1: geo::Point,
+    pub p2: geo::Point,
+    pub tacking_width: uom::si::f64::Length,
+}
+
 /// Enum of simulation methods
-pub enum Sim_method {
-    /// Constant velocity
-    const_velocity,
+pub enum SimMethod {
+    /// Constant velocity, uses the mean velocity of the boat
+    ConstVelocity,
     // Use the mean and std of the boat speed
     // Mean_and_STD_Velocity,
     // Use downloaded weather data from file
@@ -48,7 +56,7 @@ pub struct Boat {
     pub min_angle_of_attack: Option<uom::si::f64::Angle>,
     pub location: Option<geo::Point>,
     pub heading: Option<uom::si::f64::Angle>,
-    pub route_plan: Option<Vec<geo::Point>>,
+    pub route_plan: Option<Vec<SailingLeg>>,
     pub current_leg: Option<u32>,
     pub length: Option<uom::si::f64::Length>,
     pub width: Option<uom::si::f64::Length>,
@@ -61,9 +69,11 @@ pub struct Boat {
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
-    pub simulation_method: Option<Sim_method>,
+    pub simulation_method: Option<SimMethod>,
 }
 
+// Implementation of the Boat struct
+//----------------------------------------------------
 impl Boat {
     pub fn new() -> Boat {
         Boat {
@@ -111,42 +121,7 @@ impl Boat {
     /// Function to simulate the boat moving to a new location
     /// This function takes in the timestep and updates the location of the boat after the timestep
     pub fn sim_step(&mut self, time_step: uom::si::f64::Time){
-        // Check if the boat has a route plan
-        match self.route_plan {
-            Some(ref route) => {
-                // Check if the boat has a current leg
-                match self.current_leg {
-                    Some(leg) => {
-                        // Check if the leg is valid
-                        if leg >= route.len() as u32 {
-                            panic!("Invalid leg");
-                        }
-
-                        // Get the next point in the route
-                        let next_point = route[leg as usize];
-
-                        // Calculate the distance to the next point
-                        let dist = haversine_distance(self.location.unwrap(), next_point);
-
-                        // Calculate the time it takes to get to the next point
-                        let time = dist / self.velocity_mean.unwrap();
-
-                        // Check if the time is less than the time step
-                        if time < time_step {
-                            // Move to the next point
-                            self.location = Some(next_point);
-                            self.current_leg = Some(leg + 1);
-                        } else {
-                            // Move to a new location based on the velocity and time step
-                            let new_location = self.location.unwrap() + (self.velocity_mean.unwrap() * time_step);
-                            self.location = Some(new_location);
-                        }
-                    }
-                    None => panic!("No current leg set"),
-                }
-            }
-            None => panic!("No route plan set"),
-        }
+        todo!();
     }
 }
 
@@ -266,6 +241,24 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     return (speed_avg, speed_std, cargo_avg, cargo_std, travel_time_avg, travel_time_std, num_trips)
 }
 
+
+/// Function to simulate the boat following a waypoint mission
+/// Is basically a simulation handler that pipes the boat to the correct simulation function
+/// TODO: Add what to return, save csv file? Return travel time and more?
+pub fn sim_waypoint_mission(boat: &mut Boat, waypoints: Vec<geo::Point>, time_step: uom::si::f64::Time) {
+    // Check if the boat has a route plan????
+
+    // match simulation method
+    match boat.simulation_method {
+        Some(SimMethod::ConstVelocity) => {
+            // Simulate the boat using constant velocity
+            // sim_const_velocity(boat, waypoints, time_step);
+        }
+        // Add other simulation methods here
+        _ => panic!("Invalid simulation method"),
+    }
+}
+
 // Helper functions
 //----------------------------------------------------
 /// Converts a string into an uom::si::f64::Time object
@@ -339,7 +332,8 @@ fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
 /// Converts a string into a geo::Point object
 /// point_string: The string to convert
 /// Example:
-/// let my_coord: geo::Point = str_to_coordinate("52.5200,13.4050");
+/// let my_coord: geo::Point = string_to_point("52.5200,13.4050");
+/// Note that the output is a geo::Point::new(longitude, latitude) but the input string must be in the format of latitude,longitude so the order is reversed
 pub fn string_to_point(coord_string: String) -> geo::Point {
     // Remove all spaces in string
     let coord_str_vec: Vec<&str> = coord_string.trim().split(',').collect();
@@ -521,6 +515,60 @@ pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
     return (time_mean, time_std);
 }
 
+
+/// Loads route plan from a CSV file
+/// Returns a vector of SailingLeg objects where each entry is a a leg of the trip
+/// The CSV file is expected to have the following columns in order but the header names are not important:
+/// Leg number;start_latitude;start_longitude;end_latitude;end_longitude;tacking_width[meters]
+/// The delimiter is a semicolon.
+/// file_path: Path to the CSV file
+/// Example:
+/// let file_path: &str = "my_route_plan.csv";
+pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(file_path)
+        .expect("Failed to open the file");
+
+    // Initialize a vector to store the route plan
+    let mut route_plan: Vec<SailingLeg> = Vec::new();
+
+    // Iterate through each line of the CSV file and add the coordinates to the route plan
+    for result in csv_reader.records() {
+        match result {
+            Ok(leg) => {
+                // Get the SailingLeg data from the CSV file
+                // First column is the leg number, so we skip it
+                // Start_coord
+                let start_lat = leg.get(1).expect("Start latitude missing").to_string();
+                let start_long = leg.get(2).expect("Start longitude missing").to_string();
+                // End_coord
+                let end_lat = leg.get(3).expect("End latitude missing").to_string();
+                let end_long = leg.get(4).expect("End longitude missing").to_string();
+                // Tacking width
+                let tacking_width = leg.get(5).expect("Tacking width missing").to_string();
+
+                // Make a SailingLeg object
+                let temp_sailing_leg: SailingLeg = SailingLeg {
+                    p1: string_to_point(format!("{},{}", start_lat, start_long)),
+                    p2: string_to_point(format!("{},{}", end_lat, end_long)),
+                    tacking_width: uom::si::f64::Length::new::<uom::si::length::meter>(tacking_width.parse::<f64>().expect("Invalid tacking width")),
+                };
+
+                // Add the SailingLeg object to the route plan
+                route_plan.push(temp_sailing_leg);
+            }
+            Err(err) => {
+                eprintln!("Error reading leg: {}", err);
+            }
+        }
+    }
+
+    // Return the route plan
+    return route_plan;
+}
 
 
 // Set up tests here
