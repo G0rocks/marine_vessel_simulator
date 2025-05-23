@@ -293,7 +293,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
         match result {
             Ok(leg) => {
                 // Get all values in row
-                timestamp = string_to_timestamp(leg.get(0).expect("No timestampe found").to_string());
+                timestamp = string_to_timestamp(leg.get(0).expect("No timestamp found").to_string());
                 // Convert the string to a geo::Coord object
                 coordinates_initial = string_to_point(leg.get(1).expect("No initial coordinate found").to_string());
                 coordinates_current = string_to_point(leg.get(2).expect("No initial coordinate found").to_string());
@@ -511,6 +511,9 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
 pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     // Remove all whitespaces in string
     let working_str: &str = (&time_string[..]).trim();
+
+    // print working string for debugging
+    println!("Working string: {}", working_str);
 
     // Check if the string is valid
     if working_str.len() != 16 {
@@ -928,10 +931,20 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
 }
 
 
-/// Function that writes the ship logs to a CSV file
+/// Function that writes the ship logs to a CSV file with the following columns:
+/// timestamp;coordinates_initial;coordinates_current;coordinates_final;cargo_on_board
+/// Note that the coordinates are in the format of ISO 6709 using decimal places with a comma between latitude and longitude. "latitude,longitude" (e.g., "52.5200,13.4050")
+/// The cargo is in metric tons (1 metric ton = 1000 kg)
+/// csv_file_path: Path to the CSV file
+/// boat: The boat object containing the ship logs
+/// Note: The csv file delimieter is a semicolon
 pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Error> {
-    // Create a CSV writer
-    let mut wtr = csv::Writer::from_path(csv_file_path)?;
+    // Create a CSV writer with a semicolon delimiter
+    // let mut wtr = csv::WriterBuilder::new().delimiter(b';').from_path(csv_file_path)?;
+    let mut wtr = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(csv_file_path)?;
 
     // Write the header
     wtr.write_record(&["timestamp", "coordinates_initial", "coordinates_current", "coordinates_final", "cargo_on_board"])?;
