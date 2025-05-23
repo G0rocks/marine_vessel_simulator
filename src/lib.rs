@@ -307,6 +307,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
                     // Add the distance between the coordinates
                     dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_current);
+                    // Update last coordinates
+                    coordinates_last = coordinates_current;
                 }   // Otherwise, if initial coordinate, the trip just started
                 else if coordinates_current == coordinates_initial {
                     // Increment the number of trips
@@ -511,9 +513,6 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
 pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
     // Remove all whitespaces in string
     let working_str: &str = (&time_string[..]).trim();
-
-    // print working string for debugging
-    println!("Working string: {}", working_str);
 
     // Check if the string is valid
     if working_str.len() != 16 {
