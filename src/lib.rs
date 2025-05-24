@@ -260,7 +260,7 @@ impl Boat {
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, uom::si::f64::Time, uom::si::f64::Time, u64) {
+    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, uom::si::f64::Time, uom::si::f64::Time, uom::si::f64::Length, uom::si::f64::Length, u64) {
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -272,6 +272,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     // Initialize variables to store the sum and count of speed and cargo values
     let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
     let mut cargo_vec: Vec<Option<uom::si::f64::Mass>> = Vec::new();
+    let mut dist_vec: Vec<uom::si::f64::Length> = Vec::new();
     let mut travel_time_vec: Vec<uom::si::f64::Time> = Vec::new();
 
     // Init empty csv column variable
@@ -282,7 +283,9 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let mut cargo_on_board_option: Option<uom::si::f64::Mass>;         // weight in tons
 
     // Init empty working variables
-    let mut dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+    let mut dist;
+    let mut trip_dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+    let mut last_timestamp: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
     let mut start_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
     let mut cargo_on_trip: Option<uom::si::f64::Mass> = None;
     let mut num_trips: u64 = 0;
@@ -291,72 +294,90 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     // Iterate through each line of the CSV file to calculate the mean and standard deviation of speed and cargo values, using each leg (each leg is 2 points) of the trip/s
     for result in csv_reader.records() {
         match result {
-            Ok(leg) => {
-                // Get all values in row
-                timestamp = string_to_timestamp(leg.get(0).expect("No timestamp found").to_string());
-                // Convert the string to a geo::Coord object
-                coordinates_initial = string_to_point(leg.get(1).expect("No initial coordinate found").to_string());
-                coordinates_current = string_to_point(leg.get(2).expect("No initial coordinate found").to_string());
-                coordinates_final = string_to_point(leg.get(3).expect("No initial coordinate found").to_string());
-                cargo_on_board_option = string_to_tons(leg.get(4).unwrap().to_string());
-                if cargo_on_board_option.is_some() {
+            Ok(log_entry) => {
+                // Get all values in row as usable data
+                timestamp = string_to_timestamp(log_entry.get(0).expect("No timestamp found").to_string());
+                coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
+                coordinates_current = string_to_point(log_entry.get(2).expect("No initial coordinate found").to_string());
+                coordinates_final = string_to_point(log_entry.get(3).expect("No initial coordinate found").to_string());
+                cargo_on_board_option = string_to_tons(log_entry.get(4).unwrap().to_string());
+
+                // If there is cargo on board or the cargo changed, set cargo_on_trip to the cargo on board
+                if cargo_on_board_option.is_some() || cargo_on_trip != cargo_on_board_option {
                     cargo_on_trip = cargo_on_board_option;
                 }
 
-                // If current coord is not inital or final this is a working point,
-                if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
-                    // Add the distance between the coordinates
-                    dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_current);
-                    // Update last coordinates
-                    coordinates_last = coordinates_current;
-                }   // Otherwise, if initial coordinate, the trip just started
-                else if coordinates_current == coordinates_initial {
+                // If initial coordinate, the trip just started
+                if coordinates_current == coordinates_initial {
                     // Increment the number of trips
                     num_trips += 1;
                     // Log start time
+                    last_timestamp = timestamp;
                     start_time = timestamp;
                     // Set the last coordinates to the initial coordinates
                     coordinates_last = coordinates_initial;
-                }   // Otherise, if final coordinate, the trip just ended
-                else if coordinates_current == coordinates_final {
-                    // Add the distance between the last coordinates and the final coordinates  
-                    dist = dist + haversine_distance_uom_units(coordinates_last, coordinates_final);
+                }
+                // Else then it's a working point or the endpoint and we can calculate the distance
+                else {
+                    // Add the distance traveled from last coordinates
+                    dist = haversine_distance_uom_units(coordinates_last, coordinates_current);
+                    // Update trip distance
+                    trip_dist += dist;
                     // Calculate the speed
-                    let speed = dist / (timestamp - start_time);
+                    let speed = dist / (timestamp - last_timestamp);
 
-                    // Add speed and cargo values to speed and cargo vectors
+                    // Update last_timestamp
+                    last_timestamp = timestamp;
+
+                    // Add speed value to speed vector
                     speed_vec.push(speed);
-                    cargo_vec.push(cargo_on_trip);
+                }
+
+                // If current coord is not inital or final this is a working point, set current coordinates as last coordinates
+                if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
+                    // Update last coordinates
+                    coordinates_last = coordinates_current;
+                }
+
+                // If final coordinate, the trip just ended
+                if coordinates_current == coordinates_final {
+                    // Add travel time to travel time vector
                     travel_time_vec.push(timestamp - start_time);
-                    
-                    // Reset distance
-                    dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+                    // Add trip distance to distance vector
+                    dist_vec.push(trip_dist);
+                    // Add cargo to cargo vector
+                    cargo_vec.push(cargo_on_trip);
+
+                    // Reset trip distance distance
+                    trip_dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
                     // Reset cargo
                     cargo_on_trip = None;
                 }
             }
-            // Handle the error if the leg cannot be read
+            // Handle the error if the log_entry cannot be read
             Err(err) => {
-                eprintln!("Error reading leg: {}", err);
+                eprintln!("Error reading log_entry: {}", err);
             }
         }
     }
 
-
-    // Calculate the mean and standard deviation of the speed, cargo and travel time vectors
-    let speed_avg: uom::si::f64::Velocity;
+    // Calculate the mean and standard deviation of the vectors
+    let speed_mean: uom::si::f64::Velocity;
     let speed_std: uom::si::f64::Velocity;
-    let cargo_avg: Option<uom::si::f64::Mass>;
+    let cargo_mean: Option<uom::si::f64::Mass>;
     let cargo_std: Option<uom::si::f64::Mass>;
-    let travel_time_avg: uom::si::f64::Time;
+    let travel_time_mean: uom::si::f64::Time;
     let travel_time_std: uom::si::f64::Time;
+    let dist_mean: uom::si::f64::Length;
+    let dist_std: uom::si::f64::Length;
 
-    (speed_avg, speed_std) = get_speed_mean_and_std(&speed_vec);
-    (cargo_avg, cargo_std) = get_weight_mean_and_std(&cargo_vec);
-    (travel_time_avg, travel_time_std) = get_time_mean_and_std(&travel_time_vec);
+    (speed_mean, speed_std) = get_speed_mean_and_std(&speed_vec);
+    (cargo_mean, cargo_std) = get_weight_mean_and_std(&cargo_vec);
+    (travel_time_mean, travel_time_std) = get_time_mean_and_std(&travel_time_vec);
+    (dist_mean, dist_std) = get_distance_mean_and_std(&dist_vec);
 
     // Return the values
-    return (speed_avg, speed_std, cargo_avg, cargo_std, travel_time_avg, travel_time_std, num_trips)
+    return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
 }
 
 
@@ -873,6 +894,55 @@ pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
     // Return the mean and standard deviation
     return (time_mean, time_std);
 }
+
+
+
+/// Returns the average and standard deviation of a vector of uom::si::f64::Length objects
+/// dist_vec: The vector of uom::si::f64::Length objects
+/// Example:
+/// let (my_mean, my_std) = get_dist_mean_and_std(&my_vec);
+pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> (uom::si::f64::Length, uom::si::f64::Length) {
+    // Calculate the mean of the vector
+    let mut total = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+
+    // loop through vector, add all values to the total
+    for dist in dist_vec {
+        total = total + *dist;
+    }
+    // Find mean
+    let mean: uom::si::f64::Length = total / dist_vec.len() as f64;
+    let mean_f64: f64 = mean.get::<uom::si::length::meter>();
+
+    // Calculate the standard deviation of the vector
+    let mut variance: f64 = 0.0;
+
+    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
+    for dist in dist_vec {
+        variance = variance + (dist.get::<uom::si::length::meter>() - mean_f64).powi(2);
+    }
+    variance = variance / ((dist_vec.len() - 1) as f64);
+
+    // Find standard deviation from variance
+    let std: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(variance.sqrt());
+
+    // Return the mean and standard deviation
+    return (mean, std);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /// Loads route plan from a CSV file
