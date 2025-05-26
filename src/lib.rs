@@ -302,11 +302,6 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 coordinates_final = string_to_point(log_entry.get(3).expect("No initial coordinate found").to_string());
                 cargo_on_board_option = string_to_tons(log_entry.get(4).unwrap().to_string());
 
-                // If there is cargo on board or the cargo changed, set cargo_on_trip to the cargo on board
-                if cargo_on_board_option.is_some() || cargo_on_trip != cargo_on_board_option {
-                    cargo_on_trip = cargo_on_board_option;
-                }
-
                 // If initial coordinate, the trip just started
                 if coordinates_current == coordinates_initial {
                     // Increment the number of trips
@@ -333,6 +328,12 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     speed_vec.push(speed);
                 }
 
+                // If there is cargo on board, set cargo_on_trip to the cargo on board. If the cargo changes then that should be the end of the trip
+                if cargo_on_board_option.is_some() {
+                    cargo_on_trip = cargo_on_board_option;                    
+                }
+
+
                 // If current coord is not inital or final this is a working point, set current coordinates as last coordinates
                 if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
                     // Update last coordinates
@@ -345,9 +346,11 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     travel_time_vec.push(timestamp - start_time);
                     // Add trip distance to distance vector
                     dist_vec.push(trip_dist);
-                    // Add cargo to cargo vector
-                    cargo_vec.push(cargo_on_trip);
-
+                    // If there is cargo, Add cargo to cargo vector
+                    if cargo_on_trip.is_some() {
+                        cargo_vec.push(cargo_on_trip);
+                    }
+                     
                     // Reset trip distance distance
                     trip_dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
                     // Reset cargo
@@ -773,7 +776,7 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
     // Parse the cargo as f64
     let cargo: f64 = cargo_str.parse::<f64>().expect("Invalid cargo");
 
-    // Make return coordinate
+    // Make return value
     let return_cargo: Option<uom::si::f64::Mass> = Some(uom::si::f64::Mass::new::<uom::si::mass::ton>(cargo));
     return return_cargo;
 }
@@ -928,21 +931,6 @@ pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> (uom::
     // Return the mean and standard deviation
     return (mean, std);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /// Loads route plan from a CSV file
