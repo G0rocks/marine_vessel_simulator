@@ -11,6 +11,11 @@ use uom::{self};    // Units of measurement. Makes sure that the correct units a
 use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::{io}; // To use errors
+use plotters::*; // Plotters for visualizing data
+
+// Internal modules
+pub mod simulators;
+pub use crate::simulators::*; // Import the simulators module
 
 // Structs and enums
 //----------------------------------------------------
@@ -153,20 +158,6 @@ pub struct ShipLogEntry {
     pub coordinates_current: geo::Point,
     pub coordinates_final: geo::Point,
     pub cargo_on_board: uom::si::f64::Mass,
-}
-
-/// Enum of simulation methods
-pub enum SimMethod {
-    /// Constant velocity, uses the mean velocity of the boat
-    ConstVelocity,
-    // Use the mean and std of the boat speed
-    // Mean_and_STD_Velocity,
-    // Use downloaded weather data from file
-    // Weather_data_from_file,
-    // Use the copernicus weather data from the past for the exact location of the boat to simulate the boat movements
-    // Copernicus_Weather_Data,
-    // Use the copernicus weather forecast data for the exact location of the boat to simulate the boat movements
-    // Copernicus_Weather_Forecast,
 }
 
 
@@ -385,169 +376,71 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 }
 
 
-/// Function that simulates more than one waypoint mission
-pub fn sim_waypoint_missions(boat: &mut Boat, start_times: Vec<Timestamp>, time_step: f64, max_iterations: usize) -> Result<Vec<String>, io::Error> {
-    // Init sim_msg:
-    let mut sim_msg_vec: Vec<String> = Vec::new();
-    // Runs sim_waypoint_mission for each start time in start_times
-    for start_time in start_times {
-        match sim_waypoint_mission(boat, start_time, time_step, max_iterations) {
-            Ok(sim_msg) => {
-                // Add sim_msg to sim_msg_vec
-                sim_msg_vec.push(sim_msg);
+/// Function for visualizing shipping_logs
+/// ship_logs_file_path: Path to the CSV file where the ship logs are stored
+/// figure_file_path: Path to the file where the figure will be saved
+/// Example:
+pub fn visualize_shipping_logs(ship_logs_file_path: &str, figure_file_path: &str) {
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(ship_logs_file_path)
+        .expect("Failed to open the file");
+
+    // Init figure
+    let root = plotters::prelude::BitMapBackend::new("plotters-doc-data/0.png", (640, 480)).into_drawing_area();
+    root.fill(&plotters::prelude::WHITE)?;
+    let mut chart = plotters::prelude::ChartBuilder::on(&root)
+        .caption("y=x^2", ("sans-serif", 50).plotters::into_font())
+        .margin(5)
+        .x_label_area_size(30)
+        .y_label_area_size(30)
+        .build_cartesian_2d(-1f32..1f32, -0.1f32..1f32)?;
+
+    chart.configure_mesh().draw()?;
+
+    chart
+        .draw_series(plotters::LineSeries::new(
+            (-50..=50).map(|x| x as f32 / 50.0).map(|x| (x, x * x)),
+            &RED,
+        ))?
+        .label("y = x^2")
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+
+    chart
+        .configure_series_labels()
+        .background_style(&WHITE.mix(0.8))
+        .border_style(&BLACK)
+        .draw()?;
+
+    root.present()?;
+
+
+
+
+    // Iterate through each line of the CSV file to draw the values
+    for result in csv_reader.records() {
+        match result {
+            Ok(log_entry) => {
+                // Get all values in row as usable data
+                let timestamp = log_entry.get(0).expect("No timestamp found").to_string();
+                let coordinates_initial = log_entry.get(1).expect("No initial coordinate found").to_string();
+                let coordinates_current = log_entry.get(2).expect("No current coordinate found").to_string();
+                let coordinates_final = log_entry.get(3).expect("No final coordinate found").to_string();
+                let cargo_on_board = log_entry.get(4).unwrap().to_string();
+
+                // Draw point on figure
+
             }
-            Err(e) => {
-                // Print the error message
-                return Err(io::Error::new(io::ErrorKind::Other, format!("Error during simulation for start time {}: {}", start_time.to_string(), e)));
+            Err(err) => {
+                eprintln!("Error reading log_entry: {}", err);
             }
-        }
-    }
-
-    // Run successful, return Ok(sim_msg_vec)
-    return Ok(sim_msg_vec);
-}
-
-/// Function to simulate the boat following a waypoint mission
-/// Is basically a simulation handler that pipes the boat to the correct simulation function
-/// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
-pub fn sim_waypoint_mission(boat: &mut Boat, start_time: Timestamp, time_step: f64, max_iterations: usize) -> Result<String, io::Error> {
-    // Check if the boat has a route plan, if no route plan
-    if boat.route_plan.is_none() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat has no route plan"));
-    }
-
-    // match simulation method and run corresponding simulation function
-    match boat.simulation_method {
-        Some(SimMethod::ConstVelocity) => {
-            // Simulate the boat using constant velocity
-            match sim_waypoint_mission_constant_velocity(boat, start_time, time_step, max_iterations) {
-                Ok(sim_msg) => {
-                    return Ok(sim_msg);
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        }
-        // Add other simulation methods here
-        // Default case returns error for invalid simulation method
-        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid simulation method"))
-    } 
-}
-
-
-// Simulators
-//----------------------------------------------------
-/// Simulates the boat using constant velocity
-pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Timestamp, time_step: f64, max_iterations: usize) -> Result<String, io::Error> {
-    // Set boats current location to the first waypoint
-    boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
-    // Set current leg to 1
-    boat.current_leg = Some(1);
-    // Get total number of legs
-    let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
-
-    // Init travel_dist
-    let mut travel_dist: uom::si::f64::Length;
-
-    // Init ship_log_entry
-    // Get initial location
-    let coordinates_initial = boat.location.unwrap();
-    // Get final location to last waypoint
-    let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
-    let new_log_entry: ShipLogEntry = ShipLogEntry {
-        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
-        coordinates_initial: coordinates_initial,
-        coordinates_current: coordinates_initial,
-        coordinates_final: coordinates_final,
-        cargo_on_board: boat.cargo_current,
-    };
-    // Push first ship log entry
-    boat.ship_log.push(new_log_entry);
-
-    // Loop through each time step
-    for i in 0..max_iterations {
-        // Simulate the boat moving towards the next waypoint
-        // Get distance traveled in time step
-        // travel_dist = boat.velocity_mean.unwrap() * time_step;
-        travel_dist = boat.velocity_mean.unwrap() * uom::si::f64::Time::new::<uom::si::time::day>(time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
-
-        // While still have some distance left to travel during time step
-        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
-
-            // Get next waypoint
-            let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
-            // Get distance to next waypoint from current location
-            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
-
-            // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
-            if travel_dist > dist_to_next_waypoint {
-                // Move to next waypoint
-                boat.location = Some(next_waypoint);
-
-                // If the boat has reached the last waypoint, stop the simulation
-                if boat.location.unwrap() == coordinates_final {
-                    // Update ship logs with last point
-                    let new_log_entry: ShipLogEntry = ShipLogEntry {
-                        // Set timestamp to last shiplogentry + time step
-                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
-                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
-                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
-                        coordinates_initial: coordinates_initial,
-                        coordinates_current: boat.location.unwrap(),
-                        coordinates_final: coordinates_final,
-                        cargo_on_board: boat.cargo_current,
-                    };
-
-                    // Push the new log entry to the ship log
-                    boat.ship_log.push(new_log_entry);
-
-                    // Stop the simulation
-                    return Ok("Simulation completed".to_string());
-                }
-
-                // Update current leg number
-                boat.current_leg = Some(boat.current_leg.unwrap() + 1);
-                // Reduce travel distance by distance to next waypoint
-                travel_dist = travel_dist - dist_to_next_waypoint;
-            }
-            // Otherwise, move boat towards next waypoint and log to ship_log
-            else {
-                // Get bearing to next waypoint
-                let bearing = Haversine.bearing(boat.location.unwrap(), next_waypoint);
-
-                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
-
-                // Update the location of the boat
-                boat.location = Some(new_location);
-
-                // Log the new location to the ship log
-                let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    timestamp: start_time.add_days(((i + 1) as f64)*time_step),
-                    // timestamp: start_time + ((i + 1) as f64)*time_step,
-                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
-                    coordinates_initial: coordinates_initial,
-                    coordinates_current: boat.location.unwrap(),
-                    coordinates_final: coordinates_final,
-                    cargo_on_board: boat.cargo_current,
-                    };
-
-                // Push the new log entry to the ship log
-                boat.ship_log.push(new_log_entry);
-
-                // Set travel distance to zero for next loop
-                travel_dist = travel_dist - travel_dist;
-            }
-        } // End while loop
+        } // End match
     } // End for loop
 
-    // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
-    // Return the ship log TODO: Move inside for loop
-    return Ok("Maximized number of iterations. Stopping simulation".to_string());
+    // Save figure to file
 }
-
-
 
 
 
@@ -811,6 +704,11 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
 /// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
 pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
     (uom::si::f64::Velocity, uom::si::f64::Velocity) {
+    // Validate that the speed_vec has at least 1 value
+    if speed_vec.is_empty() {
+        panic!("Speed vector is empty, cannot calculate mean and standard deviation");
+    }
+    
     // Calculate the mean of the speed vector
     let mut tot_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
 
