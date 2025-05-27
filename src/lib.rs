@@ -10,7 +10,7 @@ use csv;    // CSV reader to read csv files
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
-use std::io; // To use errors
+use std::{io}; // To use errors
 
 // Structs and enums
 //----------------------------------------------------
@@ -28,6 +28,7 @@ pub enum Propulsion {
 
 /// Struct to hold timestamps in a way that makes it easier to work with than uom::si::f64::Time in Huldars opinion
 #[derive(Debug)]
+#[derive(Copy, Clone)]
 pub struct Timestamp {
     pub year: u16,
     pub month: u8,
@@ -383,6 +384,28 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
 }
 
+
+/// Function that simulates more than one waypoint mission
+pub fn sim_waypoint_missions(boat: &mut Boat, start_times: Vec<Timestamp>, time_step: f64, max_iterations: usize) -> Result<Vec<String>, io::Error> {
+    // Init sim_msg:
+    let mut sim_msg_vec: Vec<String> = Vec::new();
+    // Runs sim_waypoint_mission for each start time in start_times
+    for start_time in start_times {
+        match sim_waypoint_mission(boat, start_time, time_step, max_iterations) {
+            Ok(sim_msg) => {
+                // Add sim_msg to sim_msg_vec
+                sim_msg_vec.push(sim_msg);
+            }
+            Err(e) => {
+                // Print the error message
+                return Err(io::Error::new(io::ErrorKind::Other, format!("Error during simulation for start time {}: {}", start_time.to_string(), e)));
+            }
+        }
+    }
+
+    // Run successful, return Ok(sim_msg_vec)
+    return Ok(sim_msg_vec);
+}
 
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
