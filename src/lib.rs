@@ -131,6 +131,23 @@ impl Timestamp {
     }
 }
 
+/// Struct that holds wind data
+pub struct Wind {
+    /// Wind speed
+    pub speed: uom::si::f64::Velocity,
+    /// Wind direction in degrees, 0° is north, 90° is east, 180° is south, 270° is west
+    pub angle: f64,
+}
+
+impl Wind {
+    /// Creates a new wind object
+    pub fn new(speed: uom::si::f64::Velocity, angle: f64) -> Wind {
+        Wind {
+            speed,
+            angle,
+        }
+    }
+}
 
 
 // Functions
