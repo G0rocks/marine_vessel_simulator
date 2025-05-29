@@ -16,21 +16,11 @@ use plotters::prelude::*; // Plotters for visualizing data
 // Internal modules
 pub mod simulators;
 pub use crate::simulators::*; // Import the simulators module
+pub mod vessels;
+pub use crate::vessels::*; // Import the simulators module
 
 // Structs and enums
 //----------------------------------------------------
-/// enum of boat propulsion system types
-pub enum Propulsion {
-    Sail,
-    // Diesel,
-    // Electric,
-    // Hybrid,
-    // Kite,
-    // FlettnerRotor,
-    // Nuclear,
-    // Other,
-}
-
 /// Struct to hold timestamps in a way that makes it easier to work with than uom::si::f64::Time in Huldars opinion
 #[derive(Debug)]
 #[derive(Copy, Clone)]
@@ -141,96 +131,6 @@ impl Timestamp {
     }
 }
 
-
-/// Struct to hold sailing leg data
-#[derive(Debug)]
-pub struct SailingLeg {
-    pub p1: geo::Point,
-    pub p2: geo::Point,
-    pub tacking_width: uom::si::f64::Length,
-}
-
-/// Struct to hold ship long entry
-#[derive(Debug)]
-pub struct ShipLogEntry {
-    pub timestamp: Timestamp,
-    pub coordinates_initial: geo::Point,
-    pub coordinates_current: geo::Point,
-    pub coordinates_final: geo::Point,
-    pub cargo_on_board: uom::si::f64::Mass,
-}
-
-
-/// Struct to hold boat metadata
-/// All fields are optional, so that the struct can be created without knowing all the values
-pub struct Boat {
-    pub imo: Option<u32>,
-    pub name: Option<String>,
-    pub min_angle_of_attack: Option<uom::si::f64::Angle>,
-    pub location: Option<geo::Point>,
-    pub bearing: Option<uom::si::f64::Angle>,   //  North: 0°, East: 90°, South: 180°, West: 270°
-    pub route_plan: Option<Vec<SailingLeg>>,
-    pub current_leg: Option<u32>,
-    pub length: Option<uom::si::f64::Length>,
-    pub width: Option<uom::si::f64::Length>,
-    pub draft: Option<uom::si::f64::Length>,
-    pub mass: Option<uom::si::f64::Mass>,
-    pub propulsion: Option<Propulsion>,
-    pub velocity_mean: Option<uom::si::f64::Velocity>,
-    pub velocity_std: Option<uom::si::f64::Velocity>,
-    pub cargo_max_capacity: Option<uom::si::f64::Mass>,
-    pub cargo_current: uom::si::f64::Mass,
-    pub cargo_mean: Option<uom::si::f64::Mass>,
-    pub cargo_std: Option<uom::si::f64::Mass>,
-    pub ship_log: Vec<ShipLogEntry>,
-}
-
-// Implementation of the Boat struct
-//----------------------------------------------------
-impl Boat {
-    pub fn new() -> Boat {
-        Boat {
-            imo: None,
-            name: None,
-            min_angle_of_attack: None,
-            location: None,
-            bearing: None,
-            route_plan: None,
-            current_leg: None,
-            length: None,
-            width: None,
-            draft: None,
-            mass: None,
-            propulsion: None,
-            velocity_mean: None,
-            velocity_std: None,
-            cargo_max_capacity: None,
-            cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
-            cargo_mean: None,
-            cargo_std: None,
-            ship_log: Vec::new(),
-        }
-    }
-
-    pub fn set_name(&mut self, name: &str) {
-        self.name = Some(name.to_string());
-    }
-
-    pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
-        // Check if the cargo is too heavy
-        match self.cargo_max_capacity {
-            Some(max_capacity) => {
-                if cargo > max_capacity {
-                    panic!("Cargo is too heavy");
-                }
-            }
-            None => {}  // No max capacity set, so do nothing
-        }
-
-        // Set the cargo
-        self.cargo_current = cargo;
-    }
-}
 
 
 // Functions

@@ -1,0 +1,111 @@
+/// Everything vessel related for the Marine vessel simulator that simulates the behaviour of marine vessels out at sea.
+/// Author: G0rocks
+/// Date: 2025-05-29
+
+use crate::*;   // To use everything from the crate
+
+// Structs and Enums
+//----------------------------------------------------
+/// Struct to hold sailing leg data
+#[derive(Debug)]
+pub struct SailingLeg {
+    pub p1: geo::Point,
+    pub p2: geo::Point,
+    pub tacking_width: uom::si::f64::Length,
+}
+
+/// Struct to hold ship long entry
+#[derive(Debug)]
+pub struct ShipLogEntry {
+    pub timestamp: Timestamp,
+    pub coordinates_initial: geo::Point,
+    pub coordinates_current: geo::Point,
+    pub coordinates_final: geo::Point,
+    pub cargo_on_board: uom::si::f64::Mass,
+}
+
+/// Struct to represent a sail
+pub struct Sail {
+    pub area: uom::si::f64::Area,       // Area of the sail in square meters
+    pub current_angle_of_attack: f64,   // Current angle of attack in degrees. Angle between sails chordlength and the wind direction
+    pub lift_coefficient: f64,          // Lift coefficient of the sail
+    pub drag_coefficient: f64,          // Drag coefficient of the sail
+}
+
+/// Struct to hold boat metadata
+/// All fields are optional, so that the struct can be created without knowing all the values
+pub struct Boat {
+    pub imo: Option<u32>,
+    pub name: Option<String>,
+    pub min_angle_of_attack: Option<f64>,
+    pub location: Option<geo::Point>,
+    pub heading: Option<f64>,   /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub sail: Option<Sail>,
+    pub route_plan: Option<Vec<SailingLeg>>,
+    pub current_leg: Option<u32>,
+    pub length: Option<uom::si::f64::Length>,
+    pub width: Option<uom::si::f64::Length>,
+    pub draft: Option<uom::si::f64::Length>,
+    pub mass: Option<uom::si::f64::Mass>,   /// Mass of the boat without cargo or fuel (a.k.a dry weight)
+    pub velocity_current: Option<uom::si::f64::Velocity>,  /// Current velocity of the boat
+    pub velocity_mean: Option<uom::si::f64::Velocity>,
+    pub velocity_std: Option<uom::si::f64::Velocity>,
+    pub cargo_max_capacity: Option<uom::si::f64::Mass>,
+    pub cargo_current: uom::si::f64::Mass,
+    pub cargo_mean: Option<uom::si::f64::Mass>,
+    pub cargo_std: Option<uom::si::f64::Mass>,
+    pub hull_drag_coefficient: Option<f64>,  /// Coefficient of drag for the hull
+    pub ship_log: Vec<ShipLogEntry>,
+}
+
+// Implementation of the Boat struct
+//----------------------------------------------------
+impl Boat {
+    pub fn new() -> Boat {
+        Boat {
+            imo: None,
+            name: None,
+            min_angle_of_attack: None,
+            location: None,
+            heading: None,
+            sail: None,
+            route_plan: None,
+            current_leg: None,
+            length: None,
+            width: None,
+            draft: None,
+            mass: None,
+            velocity_current: None,
+            velocity_mean: None,
+            velocity_std: None,
+            cargo_max_capacity: None,
+            cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
+            cargo_mean: None,
+            cargo_std: None,
+            hull_drag_coefficient: None,
+            ship_log: Vec::new(),
+        }
+    }
+
+    pub fn set_name(&mut self, name: &str) {
+        self.name = Some(name.to_string());
+    }
+
+    pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
+        // Check if the cargo is too heavy
+        match self.cargo_max_capacity {
+            Some(max_capacity) => {
+                if cargo > max_capacity {
+                    panic!("Cargo is too heavy");
+                }
+            }
+            None => {}  // No max capacity set, so do nothing
+        }
+
+        // Set the cargo
+        self.cargo_current = cargo;
+    }
+}
+
+
+
