@@ -26,10 +26,45 @@ pub struct ShipLogEntry {
 
 /// Struct to represent a sail
 pub struct Sail {
-    pub area: uom::si::f64::Area,       // Area of the sail in square meters
+    pub area: uom::si::f64::Area,       // Area of the sail
     pub current_angle_of_attack: f64,   // Current angle of attack in degrees. Angle between sails chordlength and the wind direction
     pub lift_coefficient: f64,          // Lift coefficient of the sail
     pub drag_coefficient: f64,          // Drag coefficient of the sail
+}
+
+impl Sail {
+    pub fn new(area: uom::si::f64::Area, current_angle_of_attack: f64, lift_coefficient: f64, drag_coefficient: f64) -> Sail {
+        Sail {
+            area,
+            current_angle_of_attack,
+            lift_coefficient,
+            drag_coefficient,
+        }
+    }
+}
+
+/// Struct to represent rudder
+pub struct Rudder {
+    /// Area of the rudder
+    pub area: uom::si::f64::Area,
+    /// Current angle of attack in degrees. Angle between rudders chordlength and the boats heading. 0° means rudder is aligned with the boat's heading. Negative values mean rudder is turned to port, positive values mean rudder is turned to starboard.
+    pub current_angle_of_attack: f64,
+    /// Lift coefficient of the rudder
+    pub lift_coefficient: f64,
+    /// Drag coefficient of the rudder
+    pub drag_coefficient: f64,
+}
+
+impl Rudder {
+    pub fn new(area: uom::si::f64::Area, current_angle_of_attack: f64, lift_coefficient: f64, drag_coefficient: f64) -> Rudder {
+        Rudder {
+            area,
+            current_angle_of_attack,
+            lift_coefficient,
+            drag_coefficient,
+        }
+    }
+    
 }
 
 /// Struct to hold boat metadata
@@ -41,6 +76,7 @@ pub struct Boat {
     pub location: Option<geo::Point>,
     pub heading: Option<f64>,   /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub sail: Option<Sail>,
+    pub rudder: Option<Rudder>,
     pub route_plan: Option<Vec<SailingLeg>>,
     pub current_leg: Option<u32>,
     pub length: Option<uom::si::f64::Length>,
@@ -69,6 +105,7 @@ impl Boat {
             location: None,
             heading: None,
             sail: None,
+            rudder: None,
             route_plan: None,
             current_leg: None,
             length: None,
