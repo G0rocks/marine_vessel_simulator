@@ -182,7 +182,6 @@ pub struct Boat {
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
-    pub simulation_method: Option<SimMethod>,
     pub ship_log: Vec<ShipLogEntry>,
 }
 
@@ -209,7 +208,6 @@ impl Boat {
             cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
             cargo_mean: None,
             cargo_std: None,
-            simulation_method: None,
             ship_log: Vec::new(),
         }
     }
