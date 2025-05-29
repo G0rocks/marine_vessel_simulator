@@ -377,6 +377,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 
 
 /// Function for visualizing shipping_logs
+/// The starting point is green and the final point is red, the coordinates of those points are shown in the figure.
+/// Note: Currently plots to a flat X-Y plane, so the coordinates are not projected onto a globe.
 /// ship_logs_file_path: Path to the CSV file where the ship logs are stored
 /// figure_file_path: Path to the file where the figure will be saved
 /// Example:
@@ -443,7 +445,6 @@ pub fn visualize_ship_logs(ship_logs_file_path: &str, figure_file_path: &str) ->
                 // figure.draw(&dot_and_label(0.5, 0.6)).expect("Failed to draw dot and label");
                 let (x, y) = geo_point_to_xy(coordinates_current);
                 figure.draw(&dot(x, y)).expect("Failed to draw dot");
-                break;
             }
             Err(err) => {
                 eprintln!("Error reading log_entry: {}", err);
