@@ -12,6 +12,7 @@ use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical c
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::{io}; // To use errors
 use plotters::prelude::*; // Plotters for visualizing data
+use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 
 // Internal modules
 pub mod simulators;
@@ -281,11 +282,50 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let dist_mean: uom::si::f64::Length;
     let dist_std: uom::si::f64::Length;
 
-    (speed_mean, speed_std) = get_speed_mean_and_std(&speed_vec);
-    (cargo_mean, cargo_std) = get_weight_mean_and_std(&cargo_vec);
-    (travel_time_mean, travel_time_std) = get_time_mean_and_std(&travel_time_vec);
-    (dist_mean, dist_std) = get_distance_mean_and_std(&dist_vec);
-
+    match get_speed_mean_and_std(&speed_vec) {
+        Ok((mean, std)) => {
+            speed_mean = mean;
+            speed_std = std;
+        },
+        Err(e) => {
+            eprintln!("Error calculating speed mean and std. Set to zero. Error message: {}", e);
+            speed_mean = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
+            speed_std = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
+        }
+    }
+    match get_weight_mean_and_std(&cargo_vec) {
+        Ok((mean, std)) => {
+            cargo_mean = mean;
+            cargo_std = std;
+        },
+        Err(e) => {
+            eprintln!("Error calculating cargo mean and std. Set to None. Error message: {}", e);
+            cargo_mean = None;
+            cargo_std = None;
+        }
+    }
+    match get_time_mean_and_std(&travel_time_vec) {
+        Ok((mean, std)) => {
+            travel_time_mean = mean;
+            travel_time_std = std;
+        },
+        Err(e) => {
+            eprintln!("Error calculating travel time mean and std. Set to zero. Error message: {}", e);
+            travel_time_mean = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+            travel_time_std = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+        }
+    }
+    match get_distance_mean_and_std(&dist_vec) {
+        Ok((mean, std)) => {
+            dist_mean = mean;
+            dist_std = std;
+        },
+        Err(e) => {
+            eprintln!("Error calculating distance mean and std. Set to zero. Error message: {}", e);
+            dist_mean = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+            dist_std = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+        }
+    }
     // Return the values
     return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
 }
@@ -297,7 +337,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 /// ship_logs_file_path: Path to the CSV file where the ship logs are stored
 /// figure_file_path: Path to the file where the figure will be saved
 /// Example:
-pub fn visualize_ship_logs(ship_logs_file_path: &str, figure_file_path: &str) -> Result<(), io::Error>{
+pub fn visualize_ship_logs_rust_only(ship_logs_file_path: &str, figure_file_path: &str) -> Result<(), io::Error>{
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
@@ -372,6 +412,59 @@ pub fn visualize_ship_logs(ship_logs_file_path: &str, figure_file_path: &str) ->
 
 
     // Save figure to file
+
+    // Return Ok if all went well
+    return Ok(());
+}
+
+/// Visualize ship logs with plotly on map
+pub fn visualize_ship_logs(ship_logs_file_path: &str, _figure_file_path: &str) -> Result<(), io::Error> {
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(ship_logs_file_path)
+        .expect("Failed to open the file");
+
+    // Init vectors for coordinates
+    let mut y_vec: Vec<f64> = Vec::new();
+    let mut x_vec: Vec<f64> = Vec::new();
+
+    // Iterate through each line of the CSV file to draw the values
+    for result in csv_reader.records() {
+        match result {
+            Ok(log_entry) => {
+                // Get current coordinates
+                let coordinates_current = string_to_point(log_entry.get(2).expect("No current coordinate found").to_string());
+
+                // Add coordinates to vectors
+                x_vec.push(coordinates_current.x());
+                y_vec.push(coordinates_current.y());
+            }
+            Err(err) => {
+                eprintln!("Error reading log_entry: {}", err);
+            }
+        } // End match
+    } // End for loop
+
+    // Create a plotly figure with the coordinates
+    let mut figure = plotly::Plot::new();
+    figure.add_trace(plotly::ScatterGeo::new(y_vec, x_vec)
+        .name("Ship logs").mode(plotly::common::Mode::Lines)
+        .show_legend(true));  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
+
+    // Set layout
+    let layout = plotly::Layout::new()
+        .title("Ship Logs Visualization");
+    figure.set_layout(layout);
+        
+    // Set projection to Orthographic
+
+    // Open plot
+    figure.show();
+
+    // Save the figure to a file
+    // figure.write_html("my_fig_plotly_test");
 
     // Return Ok if all went well
     return Ok(());
@@ -638,10 +731,10 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
 /// Example:
 /// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
 pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity) {
+    Result<(uom::si::f64::Velocity, uom::si::f64::Velocity), io::Error> {
     // Validate that the speed_vec has at least 1 value
     if speed_vec.is_empty() {
-        panic!("Speed vector is empty, cannot calculate mean and standard deviation");
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Speed vector is empty, cannot calculate mean and standard deviation"));
     }
     
     // Calculate the mean of the speed vector
@@ -668,7 +761,7 @@ pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
     let speed_std: uom::si::f64::Velocity = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(variance.sqrt());
 
     // Return the mean and standard deviation
-    return (speed_mean, speed_std);
+    return Ok((speed_mean, speed_std));
 }
 
 /// Returns the average and standard deviation of a vector of Option<uom::si::f64::Mass> objects
@@ -676,7 +769,12 @@ pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
 /// Example:
 /// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
 pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
-    (Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>) {
+    Result<(Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>), io::Error> {
+    // Validate that the vector has at least 1 value
+    if weight_vec.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Weight vector is empty, cannot calculate mean and standard deviation"));
+    }
+    
     // Calculate the mean of the vector
     let mut tot_weight = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(0.0);
     let mut counter: u64 = 0;
@@ -697,7 +795,7 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
 
     // If there are no values, return None
     if counter == 0 {
-        return (None, None);
+        return Ok((None, None));
     }
 
     // Find mean
@@ -717,7 +815,7 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
     let weight_std: uom::si::f64::Mass = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(variance.sqrt());
 
     // Return the mean and standard deviation
-    return (Some(weight_mean), Some(weight_std));
+    return Ok((Some(weight_mean), Some(weight_std)));
 }
 
 
@@ -726,7 +824,12 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
 /// Example:
 /// let (my_mean, my_std) = get_time_mean_and_std(&my_vec);
 pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
-    (uom::si::f64::Time, uom::si::f64::Time) {
+    Result<(uom::si::f64::Time, uom::si::f64::Time), io::Error> {
+    // Validate that the vector has at least 1 value
+    if time_vec.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Speed vector is empty, cannot calculate mean and standard deviation"));
+    }
+    
     // Calculate the mean of the vector
     let mut tot_time = uom::si::f64::Time::new::<uom::si::time::day>(0.0);
 
@@ -751,7 +854,7 @@ pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
     let time_std: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::day>(variance.sqrt());
 
     // Return the mean and standard deviation
-    return (time_mean, time_std);
+    return Ok((time_mean, time_std));
 }
 
 
@@ -760,7 +863,11 @@ pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
 /// dist_vec: The vector of uom::si::f64::Length objects
 /// Example:
 /// let (my_mean, my_std) = get_dist_mean_and_std(&my_vec);
-pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> (uom::si::f64::Length, uom::si::f64::Length) {
+pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> Result<(uom::si::f64::Length, uom::si::f64::Length), io::Error> {
+    // Validate that the vector has at least 1 value
+    if dist_vec.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Distance vector is empty, cannot calculate mean and standard deviation"));
+    }
     // Calculate the mean of the vector
     let mut total = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
 
@@ -785,7 +892,7 @@ pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> (uom::
     let std: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(variance.sqrt());
 
     // Return the mean and standard deviation
-    return (mean, std);
+    return Ok((mean, std));
 }
 
 

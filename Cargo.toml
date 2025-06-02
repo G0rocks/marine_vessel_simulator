@@ -11,9 +11,13 @@ keywords = ["engineering", "shipping", "marine", "vessel", "simulation"]
 readme = "README.md"
 
 [dependencies]
+# Temporary direct path dependency for local development
+plotly = { path = "C:/Users/Huldar/Reykjavik University/Meistaraverkefni - Huldar - General/Model and calculators/plotly_local/plotly" }
+
 csv = "1.3.1"
 geo = "0.30.0"
 io = "0.0.2"
+# plotly = "0.12.1"
 plotters = "0.3.7"
 rand = "0.9.1"
 uom = "0.36.0"

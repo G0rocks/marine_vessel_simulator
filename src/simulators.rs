@@ -357,3 +357,205 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
     // Return the ship log TODO: Move inside for loop
     return Ok("Maximized number of iterations. Stopping simulation".to_string());
 }
+
+/// Simulates the boat using weather data from file
+/// NOTE: Currently uses 5 m/s blowing in from the north as a placeholder for the weather data
+pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
+    // Verify that necessary fields are set
+    if simulation.weather_data_file.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather data file name from simulation"));
+    }
+    if boat.mass.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing mass from boat"));
+    }
+    if boat.sail.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing sail from boat"));
+    }
+    if boat.min_angle_of_attack.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing minimum angle of attack from boat"));
+    }
+    // if boat.hull_drag_coefficient.is_none() {
+    //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
+    // }
+    if boat.route_plan.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
+    }
+
+    // Set boats current location to the first waypoint
+    boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
+    // Set current leg to 1
+    boat.current_leg = Some(1);
+    // Get total number of legs
+    let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
+
+    // Init travel_dist
+    let mut travel_dist: uom::si::f64::Length;
+    // init working velocity
+    let mut working_velocity: uom::si::f64::Velocity;
+
+    // Init ship_log_entry
+    // Get initial location
+    let coordinates_initial = boat.location.unwrap();
+    // Get final location to last waypoint
+    let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
+    let new_log_entry: ShipLogEntry = ShipLogEntry {
+        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
+        coordinates_initial: coordinates_initial,
+        coordinates_current: coordinates_initial,
+        coordinates_final: coordinates_final,
+        cargo_on_board: boat.cargo_current,
+    };
+    // Push first ship log entry
+    boat.ship_log.push(new_log_entry);
+
+    // Init wind vector
+    let wind: Wind = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), -45.0); // Placeholder for wind speed, should be replaced with actual weather data from file
+    // Init next waypoint
+    let mut next_waypoint: geo::Point;
+    let mut bearing_to_next_waypoint: f64;
+    
+
+    // Loop through each time step
+    for i in 0..simulation.max_iterations {
+        // Simulate the boat moving towards the next waypoint
+        // Get next waypoint
+        next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+
+        // Get wind speed and direction for current location from weather data file
+        // ToDO
+        
+        
+        // Compute heading
+        // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
+        bearing_to_next_waypoint = Haversine.bearing(boat.location.unwrap(), next_waypoint);
+        // Compute angle of wind relative to boat heading
+        let relative_wind_angle = wind.angle - bearing_to_next_waypoint;
+        // Relative wind angle must be in the range of -180° to 180°
+        let relative_wind_angle = if relative_wind_angle < -180.0 {
+            relative_wind_angle + 360.0
+        } else if relative_wind_angle > 180.0 {
+            relative_wind_angle - 360.0
+        } else {
+            relative_wind_angle
+        };
+        // If absolute relative wind angle is smaller than minimum angle of attack, then use tacking method
+        if relative_wind_angle.abs() < boat.min_angle_of_attack.unwrap() {
+            // Set heading to the minimum angle of attack with respect to the relative wind angle
+            boat.heading = Some(wind.angle + boat.min_angle_of_attack.unwrap());
+            println!("Tacking towards next waypoint\nBearing to next waypoint: {}\nwind angle: {}\nrelative wind angle: {}\n minimum angle of attack: {}\nHeading set to: {}", bearing_to_next_waypoint, wind.angle, relative_wind_angle, boat.min_angle_of_attack.unwrap(), boat.heading.unwrap());
+        } // Otherwise relative wind angle is bigger than minimum angle of attack, then go straight towards next waypoint
+        else {
+            // Set heading to the bearing to next waypoint
+            boat.heading = Some(bearing_to_next_waypoint);
+        }
+
+
+
+        // To do : Add check for if boat is out of the tacking with of the route plan, tack.
+
+
+        
+        // Find total force on boat
+        // force on boat from wind
+        // let wind_force: uom::si::f64::Force = uom::si::f64::Force::new::<uom::si::force::newton>(5.0);
+
+        // Force from velocity of ocean current
+
+        // Add forces together
+        // let force_total: uom::si::f64::Force = wind_force; // + ocean_current_force; // Add other forces here
+
+        // Find total mass
+        // let total_mass: uom::si::f64::Mass = boat.mass.unwrap() + boat.cargo_current; // Add cargo mass to boat mass
+
+        // Find acceleration of boat from forces
+        // let a: uom::si::f64::Acceleration = force_total / total_mass; // a = F/m, where F is the total force on the boat and m is the mass of the boat
+
+        // Find final velocity of boat from acceleration
+        // let final_velocity: uom::si::f64::Velocity = a * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // final_velocity in meters per second
+
+        // Working velocity is initial velocity plus final velocity divided by 2
+        working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
+
+        // Update the current velocity of the boat
+        // boat.velocity_current = Some(working_velocity);
+
+        // Calculate drag on hull from working velocity
+        //Todo make sure all forces are correct, for now we just want to see the boat tack on the visualization
+
+
+        // Get distance traveled in time step
+        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        
+        
+
+        // While still have some distance left to travel during time step
+        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
+            // Get next waypoint
+            next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+
+            // Get distance to next waypoint from current location
+            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+
+            // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
+            if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
+                // Move to next waypoint
+                boat.location = Some(next_waypoint);
+
+                // If the boat has reached the last waypoint, stop the simulation
+                if boat.location.unwrap() == coordinates_final {
+                    // Update ship logs with last point
+                    let new_log_entry: ShipLogEntry = ShipLogEntry {
+                        // Set timestamp to last shiplogentry + time step
+                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(simulation.time_step),
+                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
+                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
+                        coordinates_initial: coordinates_initial,
+                        coordinates_current: boat.location.unwrap(),
+                        coordinates_final: coordinates_final,
+                        cargo_on_board: boat.cargo_current,
+                    };
+
+                    // Push the new log entry to the ship log
+                    boat.ship_log.push(new_log_entry);
+
+                    // Stop the simulation
+                    return Ok("Simulation completed".to_string());
+                }
+
+                // Update current leg number
+                boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+                // Reduce travel distance by distance to next waypoint
+                travel_dist = travel_dist - dist_to_next_waypoint;
+            }
+            // Otherwise, move boat forwards along heading and log to ship_log
+            else {
+                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
+                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+
+                // Update the location of the boat
+                boat.location = Some(new_location);
+
+                // Log the new location to the ship log
+                let new_log_entry: ShipLogEntry = ShipLogEntry {
+                    timestamp: start_time.add_days(((i + 1) as f64)*simulation.time_step),
+                    // timestamp: start_time + ((i + 1) as f64)*time_step,
+                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
+                    coordinates_initial: coordinates_initial,
+                    coordinates_current: boat.location.unwrap(),
+                    coordinates_final: coordinates_final,
+                    cargo_on_board: boat.cargo_current,
+                    };
+
+                // Push the new log entry to the ship log
+                boat.ship_log.push(new_log_entry);
+
+                // Set travel distance to zero for next loop
+                travel_dist = travel_dist - travel_dist;
+            }
+        } // End while loop
+    } // End for loop
+
+    // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
+    // Return the ship log TODO: Move inside for loop
+    return Ok("Maximized number of iterations. Stopping simulation".to_string());
+}
