@@ -418,7 +418,7 @@ pub fn visualize_ship_logs_rust_only(ship_logs_file_path: &str, figure_file_path
 }
 
 /// Visualize ship logs with plotly on map
-pub fn visualize_ship_logs(ship_logs_file_path: &str, _figure_file_path: &str) -> Result<(), io::Error> {
+pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, _figure_file_path: &str) -> Result<(), io::Error> {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
@@ -453,10 +453,72 @@ pub fn visualize_ship_logs(ship_logs_file_path: &str, _figure_file_path: &str) -
         .name("Ship logs").mode(plotly::common::Mode::Lines)
         .show_legend(true));  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
 
-    //Todo: Add initial and final coordinates with label
+    // Init vectors for coordinates
+    let mut x_vec: Vec<f64> = Vec::new();
+    let mut y_vec: Vec<f64> = Vec::new();
 
+    // Add each waypoint TODO: with label to plot
+    let route_plan = load_route_plan(route_plan_file_path);
+    for leg in &route_plan {
+        // Add the start point to the vectors
+        x_vec.push(leg.p1.y());
+        y_vec.push(leg.p1.x());
+    }
+    // Add last point to the vectors
+    let last_leg = route_plan.last().unwrap();
+    x_vec.push(last_leg.p2.y());
+    y_vec.push(last_leg.p2.x());
 
-    // Todo: Add bounding box for tacking width around each waypoint
+    // Add a line between the start and end points
+    figure.add_trace(plotly::ScatterGeo::new(x_vec, y_vec)
+        .mode(plotly::common::Mode::LinesMarkersText)
+        .name("Route Plan"));
+
+    // Init vectors for coordinates
+    let mut x_vec_port: Vec<f64> = Vec::new();
+    let mut y_vec_port: Vec<f64> = Vec::new();
+    let mut x_vec_starboard: Vec<f64> = Vec::new();
+    let mut y_vec_starboard: Vec<f64> = Vec::new();
+
+    // Todo: Add tacking boundary
+    for leg in &route_plan {
+        // Get point half a tacking width to the left and right of the leg
+        let bearing = Haversine.bearing(leg.p1, leg.p2);
+        println!("Bearing: {:?}", bearing - 90.0);
+        // Get the left and right points
+        let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+
+        println!("P1: {:?}", leg.p1);
+        println!("Port point: {:?}", port_point);
+        println!("Tacking width: {:?}", leg.tacking_width);
+        //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
+        let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+
+        x_vec_port.push(port_point.y());
+        y_vec_port.push(port_point.x());
+        x_vec_starboard.push(starboard_point.y());
+        y_vec_starboard.push(starboard_point.x());
+    }
+    // Add last point to the vectors
+    let bearing = Haversine.bearing(last_leg.p1, last_leg.p2);
+    // Get the left and right points
+    let port_point = Haversine.destination(last_leg.p2, bearing - 90.0, last_leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+    //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
+    let starboard_point = Haversine.destination(last_leg.p2, bearing + 90.0, last_leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+    // Append points
+    x_vec_port.push(port_point.y());
+    y_vec_port.push(port_point.x());
+    x_vec_starboard.push(starboard_point.y());
+    y_vec_starboard.push(starboard_point.x());
+
+    // Add a lines for the tacking boundary to plot
+    figure.add_trace(plotly::ScatterGeo::new(x_vec_port, y_vec_port)
+        .mode(plotly::common::Mode::LinesMarkersText)
+        .name("Tacking boundary port side"));
+    figure.add_trace(plotly::ScatterGeo::new(x_vec_starboard, y_vec_starboard)
+        .mode(plotly::common::Mode::LinesMarkersText)
+        .name("Tacking boundary starboard side"));
+
 
 
     // Todo: Add vector at each point that shows wind direction at that point at that points time?????

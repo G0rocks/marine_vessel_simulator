@@ -7,7 +7,7 @@ use crate::*;   // To use everything from the crate
 // Structs and Enums
 //----------------------------------------------------
 /// Struct to hold sailing leg data
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct SailingLeg {
     pub p1: geo::Point,
     pub p2: geo::Point,

@@ -398,7 +398,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     // Get initial location
     let coordinates_initial = boat.location.unwrap();
     // Get final location to last waypoint
-    let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
+    let coordinates_final = boat.route_plan.as_ref().unwrap()[total_legs - 1].p2;                
     let new_log_entry: ShipLogEntry = ShipLogEntry {
         timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
         coordinates_initial: coordinates_initial,
@@ -421,23 +421,25 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     for i in 0..simulation.max_iterations {
         // Simulate the boat moving towards the next waypoint
         // Get next waypoint
-        next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+        next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
 
-        // Get wind speed and direction for current location from weather data file
+        // Get weather data for current location from weather data file
+        // Wind speed and direction
         // ToDO
+
         
         // Check if boat is out of the tacking width of the route plan, tack by setting preferred wind side of the boat
         // Get tacking width from route plan
-        let tacking_width = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].tacking_width;
+        let tacking_width = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
         // Get shortest distance to leg line from current location
         // If distance to leg line is bigger than tacking width, tack. Give boat 10 iterations to make it back inside allowed area
-        if (iteration_counter + 10) < i && tacking_width < min_haversine_distance(boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()) {
+        if (iteration_counter + 10) < i && tacking_width < min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()) {
             // Tack, flipping preferred side of the boat for wind
             boat.wind_preferred_side.switch();
             // Set iteration counter to i
             iteration_counter = i;
         }
-        
+
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
         bearing_to_next_waypoint = Haversine.bearing(boat.location.unwrap(), next_waypoint);
