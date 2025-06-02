@@ -453,6 +453,10 @@ pub fn visualize_ship_logs(ship_logs_file_path: &str, _figure_file_path: &str) -
         .name("Ship logs").mode(plotly::common::Mode::Lines)
         .show_legend(true));  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
 
+    // Add initial and final coordinates with label
+
+    // Add vector at each point that shows wind direction at that point at that points time?????
+
     // Set layout
     let layout = plotly::Layout::new()
         .title("Ship Logs Visualization");
@@ -703,6 +707,21 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
     return dist;
 }
 
+/// Get shortest distance between line and point
+/// The line is made up of the points p1 and p2
+/// Point p3 is the line that the shortest distance will be calculated from.
+pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
+    // Find z in orthogonal projection of p3 onto the line p1-p2
+    let u: geo::Point = p2 - p1; // Vector from p1 to p2
+    //let u: geo::Point = geo::Point::new(p2.x() - p1.x(), p2.y() - p1.y()); // Vector from p1 to p2
+    let y: geo::Point = geo::Point::new(p3.x() - p1.x(), p3.y() - p1.y()); // Vector from p1 to p3
+    let u_to_y_hat_multiplier: f64 = (y.x()*u.x() + y.y()*u.y()) / (u.x()*u.x() + u.y()*u.y());
+    let y_hat = geo::Point::new(u.x() * u_to_y_hat_multiplier, u.y() * u_to_y_hat_multiplier); // Orthogonal projection of y onto u
+    let z: geo::Point = y - y_hat; // Point of orthogonal projection
+    
+    // Get and return the distance between the point and the line
+    return haversine_distance_uom_units(geo::Point::new(0.0, 0.0), z);
+}
 
 /// Converts a string into a uom::si::f64::Mass object
 /// cargo_string: The string to convert, must be in metric tons (1 metric ton = 1000 kg)
