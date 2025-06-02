@@ -143,9 +143,27 @@ impl Boat {
         }
     }
 
-    pub fn set_name(&mut self, name: &str) {
-        self.name = Some(name.to_string());
+    /// Tacks the boat to the other side
+    /// Switches the preferred wind side and sets the heading to the minimum angle of attack with respect to the wind angle and the new preferred wind side.
+    pub fn tack(&mut self, wind_angle: f64) {
+        // Print debug message
+        println!("Tacking the boat to the other side\n Current location {:?}", self.location);
+        // Switch preferred wind side
+        self.wind_preferred_side.switch();
+        // Set heading to the minimum angle of attack with respect to the wind angle 
+        if self.wind_preferred_side == VesselSide::Port {
+            // Wind on port side
+            self.heading = Some(wind_angle + self.min_angle_of_attack.unwrap());
+        } else if self.wind_preferred_side == VesselSide::Starboard {
+            // Wind on starboard side
+            self.heading = Some(wind_angle - self.min_angle_of_attack.unwrap());
+        }   // If boat has no preferred wind side set, catch and set to starboard
+        else {
+            self.wind_preferred_side = VesselSide::Starboard; // Default to starboard since then we have the right of way in most cases
+            self.heading = Some(wind_angle - self.min_angle_of_attack.unwrap());
+        }
     }
+
 
     pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
         // Check if the cargo is too heavy

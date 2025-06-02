@@ -487,10 +487,6 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
         println!("Bearing: {:?}", bearing - 90.0);
         // Get the left and right points
         let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
-
-        println!("P1: {:?}", leg.p1);
-        println!("Port point: {:?}", port_point);
-        println!("Tacking width: {:?}", leg.tacking_width);
         //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
         let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
 

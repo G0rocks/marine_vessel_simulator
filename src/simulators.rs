@@ -414,7 +414,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     // Init next waypoint
     let mut next_waypoint: geo::Point;
     let mut bearing_to_next_waypoint: f64;
-    let mut iteration_counter: usize = 0; // Counter for iterations to tack back into tacking width
+    let mut new_location: geo::Point;   // Init
     // Todo: Add number of tacks?
 
     // Loop through each time step
@@ -422,23 +422,12 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // Simulate the boat moving towards the next waypoint
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
+        // Get tacking width from route plan
+        let tacking_width = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
         // Get weather data for current location from weather data file
         // Wind speed and direction
         // ToDO
-
-        
-        // Check if boat is out of the tacking width of the route plan, tack by setting preferred wind side of the boat
-        // Get tacking width from route plan
-        let tacking_width = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
-        // Get shortest distance to leg line from current location
-        // If distance to leg line is bigger than tacking width, tack. Give boat 10 iterations to make it back inside allowed area
-        if (iteration_counter + 10) < i && tacking_width < min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()) {
-            // Tack, flipping preferred side of the boat for wind
-            boat.wind_preferred_side.switch();
-            // Set iteration counter to i
-            iteration_counter = i;
-        }
 
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -521,7 +510,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
             // Get distance to next waypoint from current location
             let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
 
-            // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
+            // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
             if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
                 // Move to next waypoint
                 boat.location = Some(next_waypoint);
@@ -555,7 +544,16 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
             // Otherwise, move boat forwards along heading and log to ship_log
             else {
                 // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+                // If new location is further away from leg line than half of tacking width, tack before moving
+
+                if tacking_width < min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, new_location) {
+                    boat.tack(wind.angle);
+                    // print debug message current distance to leg line
+                    println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
+                    new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+                }
+
 
                 // Update the location of the boat
                 boat.location = Some(new_location);
