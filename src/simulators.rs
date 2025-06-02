@@ -360,6 +360,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
 
 /// Simulates the boat using weather data from file
 /// NOTE: Currently uses 5 m/s blowing in from the north as a placeholder for the weather data
+/// Note: Tacking width is the total width around the center of leg line for each leg.
 pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that necessary fields are set
     if simulation.weather_data_file.is_none() {
@@ -409,11 +410,12 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     boat.ship_log.push(new_log_entry);
 
     // Init wind vector
-    let wind: Wind = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), -45.0); // Placeholder for wind speed, should be replaced with actual weather data from file
+    let wind: Wind = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), 0.0); // Placeholder for wind speed, should be replaced with actual weather data from file
     // Init next waypoint
     let mut next_waypoint: geo::Point;
     let mut bearing_to_next_waypoint: f64;
-    
+    let mut iteration_counter: usize = 0; // Counter for iterations to tack back into tacking width
+    // Todo: Add number of tacks?
 
     // Loop through each time step
     for i in 0..simulation.max_iterations {
@@ -424,6 +426,17 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // Get wind speed and direction for current location from weather data file
         // ToDO
         
+        // Check if boat is out of the tacking width of the route plan, tack by setting preferred wind side of the boat
+        // Get tacking width from route plan
+        let tacking_width = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].tacking_width;
+        // Get shortest distance to leg line from current location
+        // If distance to leg line is bigger than tacking width, tack. Give boat 10 iterations to make it back inside allowed area
+        if (iteration_counter + 10) < i && tacking_width < min_haversine_distance(boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()) {
+            // Tack, flipping preferred side of the boat for wind
+            boat.wind_preferred_side.switch();
+            // Set iteration counter to i
+            iteration_counter = i;
+        }
         
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -438,11 +451,22 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         } else {
             relative_wind_angle
         };
+
         // If absolute relative wind angle is smaller than minimum angle of attack, then use tacking method
         if relative_wind_angle.abs() < boat.min_angle_of_attack.unwrap() {
-            // Set heading to the minimum angle of attack with respect to the relative wind angle
-            boat.heading = Some(wind.angle + boat.min_angle_of_attack.unwrap());
-            println!("Tacking towards next waypoint\nBearing to next waypoint: {}\nwind angle: {}\nrelative wind angle: {}\n minimum angle of attack: {}\nHeading set to: {}", bearing_to_next_waypoint, wind.angle, relative_wind_angle, boat.min_angle_of_attack.unwrap(), boat.heading.unwrap());
+            // If wind is on port side, keep wind on port side and opposite for starboard side
+            // Set heading to the minimum angle of attack with respect to the wind angle 
+            if boat.wind_preferred_side == VesselSide::Port {
+                // Wind on port side
+                boat.heading = Some(wind.angle + boat.min_angle_of_attack.unwrap());
+            } else if boat.wind_preferred_side == VesselSide::Starboard {
+                // Wind on starboard side, keep on starboard side
+                boat.heading = Some(wind.angle - boat.min_angle_of_attack.unwrap());
+            }   // If boat has no preferred wind side set, catch and set to starboard
+            else {
+                boat.wind_preferred_side = VesselSide::Starboard; // Default to starboard since then we have the right of way in most cases
+                boat.heading = Some(wind.angle - boat.min_angle_of_attack.unwrap());
+            }
         } // Otherwise relative wind angle is bigger than minimum angle of attack, then go straight towards next waypoint
         else {
             // Set heading to the bearing to next waypoint
@@ -451,7 +475,6 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
 
 
 
-        // To do : Add check for if boat is out of the tacking with of the route plan, tack.
 
 
         

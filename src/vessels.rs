@@ -63,9 +63,26 @@ impl Rudder {
             lift_coefficient,
             drag_coefficient,
         }
-    }
-    
+    }    
 }
+
+/// Enum to represent the side of the marine vessel
+#[derive(PartialEq, Debug)]
+pub enum VesselSide {
+    Port,   // Left side of the boat when onboard and facing the bow
+    Starboard, // Right side of the boat when onboard and facing the bow
+}
+
+impl VesselSide {
+    /// Switches the vessel side to the other side
+    pub fn switch(&mut self) {
+        *self = match self {
+            VesselSide::Port => VesselSide::Starboard,
+            VesselSide::Starboard => VesselSide::Port,
+        }
+    }
+}
+
 
 /// Struct to hold boat metadata
 /// All fields are optional, so that the struct can be created without knowing all the values
@@ -90,6 +107,7 @@ pub struct Boat {
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
+    pub wind_preferred_side: VesselSide,  // Preferred side for the wind to come from, if any
     pub hull_drag_coefficient: Option<f64>,  /// Coefficient of drag for the hull
     pub ship_log: Vec<ShipLogEntry>,
 }
@@ -119,6 +137,7 @@ impl Boat {
             cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
             cargo_mean: None,
             cargo_std: None,
+            wind_preferred_side: VesselSide::Starboard,  // Default to starboard since then we have the right of way in most cases
             hull_drag_coefficient: None,
             ship_log: Vec::new(),
         }

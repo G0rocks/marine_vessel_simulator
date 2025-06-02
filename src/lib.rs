@@ -453,9 +453,14 @@ pub fn visualize_ship_logs(ship_logs_file_path: &str, _figure_file_path: &str) -
         .name("Ship logs").mode(plotly::common::Mode::Lines)
         .show_legend(true));  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
 
-    // Add initial and final coordinates with label
+    //Todo: Add initial and final coordinates with label
 
-    // Add vector at each point that shows wind direction at that point at that points time?????
+
+    // Todo: Add bounding box for tacking width around each waypoint
+
+
+    // Todo: Add vector at each point that shows wind direction at that point at that points time?????
+
 
     // Set layout
     let layout = plotly::Layout::new()
