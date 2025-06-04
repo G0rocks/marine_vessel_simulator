@@ -251,6 +251,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "copernicusmarine_rs"
+version = "0.1.0"
+dependencies = [
+ "time",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1253,12 +1260,14 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 name = "marine_vessel_simulator"
 version = "0.1.0"
 dependencies = [
+ "copernicusmarine_rs",
  "csv",
  "geo",
  "io",
  "plotly",
  "plotters",
  "rand",
+ "time",
  "uom",
  "year-helper",
 ]
