@@ -13,6 +13,8 @@ use year_helper; // Year helper to calculate the number of days in a year based 
 use std::{io}; // To use errors
 use plotters::prelude::*; // Plotters for visualizing data
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
+use copernicusmarine_rs;    // To get weather data
+use time;   // To do time calculations
 
 // Internal modules
 pub mod simulators;
@@ -22,116 +24,6 @@ pub use crate::vessels::*; // Import the simulators module
 
 // Structs and enums
 //----------------------------------------------------
-/// Struct to hold timestamps in a way that makes it easier to work with than uom::si::f64::Time in Huldars opinion
-#[derive(Debug)]
-#[derive(Copy, Clone)]
-pub struct Timestamp {
-    pub year: u16,
-    pub month: u8,
-    pub day: u16,
-    pub hour: u8,
-    pub minute: u8,
-    pub second: u8,
-}
-
-impl Timestamp {
-    /// Creates a new timestamp
-    pub fn new(year: u16, month: u8, day: u16, hour: u8, minute: u8, second: u8) -> Timestamp {
-        Timestamp {
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        let time_string: String = format!("{:04}-{:02}-{:02} {:02}:{:02}", self.year, self.month, self.day, self.hour, self.minute);
-        return time_string;
-    }
-
-    /// Adds days to the timestamp
-    pub fn add_days(&self, days: f64) -> Timestamp{
-        let mut temp_timestamp: Timestamp = Timestamp::new(self.year, self.month, self.day, self.hour, self.minute, self.second);
-        let mut whole_days_left = days as u64;
-        let day_fraction = days - days.floor();
-        let mut whole_hours_left = (day_fraction * 24.0) as u64;
-        let hour_fraction = day_fraction * 24.0 - whole_hours_left as f64;
-        let mut whole_minutes_left = (hour_fraction * 60.0) as u64;
-        let minute_fraction = hour_fraction * 60.0 - whole_minutes_left as f64;
-        let mut whole_seconds_left = (minute_fraction * 60.0) as u64;
-        
-        // Add the seconds
-        while whole_seconds_left > 0 {
-            temp_timestamp.second += 1;
-            whole_seconds_left -= 1;
-            if temp_timestamp.second > 59 {
-                temp_timestamp.second = 0;
-                whole_minutes_left += 1;
-            }
-        }
-
-        
-        // Add the minutes
-        while whole_minutes_left > 0 {
-            temp_timestamp.minute += 1;
-            whole_minutes_left -= 1;
-            if temp_timestamp.minute > 59 {
-                temp_timestamp.minute = 0;
-                whole_hours_left += 1;
-            }
-        }
-
-        // Add the hours
-        while whole_hours_left > 0 {
-            temp_timestamp.hour += 1;
-            whole_hours_left -= 1;
-            if temp_timestamp.hour > 23 {
-                temp_timestamp.hour = 0;
-                whole_days_left += 1;
-            }
-        }
-
-        // While days are left, increment the timestamp
-        while whole_days_left > 0 {
-            temp_timestamp.day += 1;
-            whole_days_left -= 1;
-            // Check if the day is valid
-            match temp_timestamp.month {
-                // 31 day month?
-                1 | 3 | 5 | 7 | 8 | 10 | 12 => {
-                    if temp_timestamp.day > 31 {
-                        temp_timestamp.day = 1;
-                        temp_timestamp.month += 1;
-                    }
-                }
-                // 30 day month?
-                4 | 6 | 9 | 11 => {
-                    if temp_timestamp.day > 30 {
-                        temp_timestamp.day = 1;
-                        temp_timestamp.month += 1;
-                    }
-                }
-                // February?
-                2 => {
-                    if year_helper::is_leap_year(temp_timestamp.year as i32) && temp_timestamp.day > 29 {
-                        temp_timestamp.day = 1;
-                        temp_timestamp.month += 1;
-                    } else if !year_helper::is_leap_year(temp_timestamp.year as i32) && temp_timestamp.day > 28 {
-                        temp_timestamp.day = 1;
-                        temp_timestamp.month += 1;
-                    }
-                }
-                _ => {}
-            }
-        }
-        return temp_timestamp
-
-    }
-}
-
 /// Struct that holds wind data
 pub struct Wind {
     /// Wind speed
@@ -168,7 +60,10 @@ impl Wind {
 /// let distance: u64 = 8000; // Distance in km
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity, Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>, uom::si::f64::Time, uom::si::f64::Time, uom::si::f64::Length, uom::si::f64::Length, u64) {
+    (uom::si::f64::Velocity, uom::si::f64::Velocity,
+        Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>,
+        time::Duration, time::Duration,
+        uom::si::f64::Length, uom::si::f64::Length, u64) {
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -181,10 +76,10 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
     let mut cargo_vec: Vec<Option<uom::si::f64::Mass>> = Vec::new();
     let mut dist_vec: Vec<uom::si::f64::Length> = Vec::new();
-    let mut travel_time_vec: Vec<uom::si::f64::Time> = Vec::new();
+    let mut travel_time_vec: Vec<time::Duration> = Vec::new();
 
     // Init empty csv column variable
-    let mut timestamp: uom::si::f64::Time;
+    let mut timestamp: time::UtcDateTime;
     let mut coordinates_initial: geo::Point;
     let mut coordinates_current: geo::Point;
     let mut coordinates_final: geo::Point;
@@ -193,8 +88,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     // Init empty working variables
     let mut dist;
     let mut trip_dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
-    let mut last_timestamp: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
-    let mut start_time: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+    let mut last_timestamp = time::UtcDateTime::now();
+    let mut start_time = time::UtcDateTime::now();
     let mut cargo_on_trip: Option<uom::si::f64::Mass> = None;
     let mut num_trips: u64 = 0;
     let mut coordinates_last: geo::Point = geo::Point::new(0.0, 0.0);
@@ -204,7 +99,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
         match result {
             Ok(log_entry) => {
                 // Get all values in row as usable data
-                timestamp = string_to_timestamp(log_entry.get(0).expect("No timestamp found").to_string());
+                timestamp = string_to_utc_date_time(log_entry.get(0).expect("No timestamp found").to_string());
                 coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
                 coordinates_current = string_to_point(log_entry.get(2).expect("No initial coordinate found").to_string());
                 coordinates_final = string_to_point(log_entry.get(3).expect("No initial coordinate found").to_string());
@@ -227,7 +122,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     // Update trip distance
                     trip_dist += dist;
                     // Calculate the speed
-                    let speed = dist / (timestamp - last_timestamp);
+                    let speed = dist / uom::si::f64::Time::new::<uom::si::time::second>((timestamp - last_timestamp).whole_seconds() as f64);
 
                     // Update last_timestamp
                     last_timestamp = timestamp;
@@ -277,8 +172,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let speed_std: uom::si::f64::Velocity;
     let cargo_mean: Option<uom::si::f64::Mass>;
     let cargo_std: Option<uom::si::f64::Mass>;
-    let travel_time_mean: uom::si::f64::Time;
-    let travel_time_std: uom::si::f64::Time;
+    let travel_time_mean: time::Duration;
+    let travel_time_std: time::Duration;
     let dist_mean: uom::si::f64::Length;
     let dist_std: uom::si::f64::Length;
 
@@ -304,15 +199,15 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             cargo_std = None;
         }
     }
-    match get_time_mean_and_std(&travel_time_vec) {
+    match get_duration_mean_and_std(&travel_time_vec) {
         Ok((mean, std)) => {
             travel_time_mean = mean;
             travel_time_std = std;
         },
         Err(e) => {
             eprintln!("Error calculating travel time mean and std. Set to zero. Error message: {}", e);
-            travel_time_mean = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
-            travel_time_std = uom::si::f64::Time::new::<uom::si::time::second>(0.0);
+            travel_time_mean = time::Duration::new(0,0);
+            travel_time_std = time::Duration::new(0,0);
         }
     }
     match get_distance_mean_and_std(&dist_vec) {
@@ -447,11 +342,47 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
         } // End match
     } // End for loop
 
+    // Setup trace of ship logs
+    let trace = plotly::ScatterGeo::new(y_vec, x_vec)
+                    .name("Ship logs").mode(plotly::common::Mode::Lines)
+                    .show_legend(true);  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
+
+
+    // Set layout as instructed by andrei-ng https://github.com/plotly/plotly.rs/pull/301
+    let layout = plotly::Layout::new()
+        .drag_mode(plotly::layout::DragMode::Zoom)
+        .margin(plotly::layout::Margin::new().top(0).left(0).bottom(0).right(0))
+        .geo(
+            plotly::layout::LayoutGeo::new()
+                .showocean(true)
+                .showlakes(true)
+                .showcountries(true)
+                .showland(true)
+                .oceancolor(plotly::color::Rgb::new(0, 255, 255))
+                .lakecolor(plotly::color::Rgb::new(0, 255, 255))
+                .landcolor(plotly::color::Rgb::new(230, 145, 56))
+                .lataxis(
+                    plotly::layout::Axis::new()
+                        .show_grid(true)
+                        .grid_color(plotly::color::Rgb::new(102, 102, 102)),
+                )
+                .lonaxis(
+                    plotly::layout::Axis::new()
+                        .show_grid(true)
+                        .grid_color(plotly::color::Rgb::new(102, 102, 102)),
+                )
+                .projection(
+                    plotly::layout::Projection::new().projection_type(plotly::layout::ProjectionType::Orthographic),
+                ),
+        );
+
+
     // Create a plotly figure with the coordinates
     let mut figure = plotly::Plot::new();
-    figure.add_trace(plotly::ScatterGeo::new(y_vec, x_vec)
-        .name("Ship logs").mode(plotly::common::Mode::Lines)
-        .show_legend(true));  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
+    // Add trace
+    figure.add_trace(trace);
+    // Set layout to orthographic
+    figure.set_layout(layout);
 
     // Init vectors for coordinates
     let mut x_vec: Vec<f64> = Vec::new();
@@ -511,6 +442,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     figure.add_trace(plotly::ScatterGeo::new(x_vec_port, y_vec_port)
         .mode(plotly::common::Mode::LinesMarkersText)
         .name("Tacking boundary port side"));
+        //.line(plotly::Line::new().color("red")));
     figure.add_trace(plotly::ScatterGeo::new(x_vec_starboard, y_vec_starboard)
         .mode(plotly::common::Mode::LinesMarkersText)
         .name("Tacking boundary starboard side"));
@@ -521,9 +453,9 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 
 
     // Set layout
-    let layout = plotly::Layout::new()
-        .title("Ship Logs Visualization");
-    figure.set_layout(layout);
+    // let layout = plotly::Layout::new()
+    //     .title("Ship Logs Visualization");
+    // figure.set_layout(layout);
         
     // Set projection to Orthographic
 
@@ -545,27 +477,28 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 /// time_string: The string to convert in the format YYYY-MM-DD hh:mm
 /// Example:
 /// let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");
-pub fn string_to_timestamp(time_string: String) -> uom::si::f64::Time {
+pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     // Remove all whitespaces in string
     let working_str: &str = (&time_string[..]).trim();
 
     // Check if the string is valid
-    if working_str.len() != 16 {
-        panic!("Invalid time format");
+    if !((working_str.len() == 16) || (working_str.len() == 25)) {
+        panic!("Invalid time format with length {}:\n{}", working_str.len(), working_str);
     }
 
     // Get parts from string
-    let year_i32:    i32 = working_str[0..4].parse::<i32>().expect("Invalid year");
-    let year_uom:   uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::year>(working_str[0..4].parse::<f64>().expect("Invalid year"));
-    let month_u8:   u8 = working_str[5..7].parse::<u8>().expect("Invalid month");
-    let day_of_month:    uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::day>(working_str[8..10].parse::<f64>().expect("Invalid day"));
-    let hour:   uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::hour>(working_str[11..13].parse::<f64>().expect("Invalid hour"));
-    let minute: uom::si::f64::Time = uom::si::time::Time::new::<uom::si::time::minute>(working_str[14..16].parse::<f64>().expect("Invalid minute"));
+    let year:    i32 = working_str[0..4].parse::<i32>().expect("Invalid year");
+    let month = time::Month::try_from(working_str[5..7].parse::<u8>().expect("Invalid month")).expect("Invalid month");
+    let day_of_month: u8 = working_str[8..10].parse::<u8>().expect("Invalid day");
+    let date = time::Date::from_calendar_date(year, month, day_of_month).expect("Could not create time::Date from values");
 
-    let days: uom::si::f64::Time = days_from_month(month_u8, year_i32) + day_of_month;
+    let hour: u8 = working_str[11..13].parse::<u8>().expect("Invalid hour");
+    let minutes: u8 = working_str[14..16].parse::<u8>().expect("Invalid minute");
+    // let seconds: u8 = working_str[17..19].parse::<u8>().expect("Invalid second");
+    let time_hms = time::Time::from_hms(hour, minutes, 0).expect("Could not create time::Time from values");
 
     // Attempt to parse the string into a uom::si::f64::Time object
-    let time_out: uom::si::f64::Time = year_uom + days + hour + minute;
+    let time_out = time::UtcDateTime::new(date, time_hms);
     
     // Return
     return time_out;
@@ -901,42 +834,41 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
 }
 
 
-/// Returns the average and standard deviation of a vector of uom::si::f64::Time objects
-/// time_vec: The vector of uom::si::f64::Time objects
+/// Returns the average and standard deviation of a vector
 /// Example:
 /// let (my_mean, my_std) = get_time_mean_and_std(&my_vec);
-pub fn get_time_mean_and_std(time_vec: &Vec<uom::si::f64::Time>) ->
-    Result<(uom::si::f64::Time, uom::si::f64::Time), io::Error> {
+pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
+    Result<(time::Duration, time::Duration), io::Error> {
     // Validate that the vector has at least 1 value
-    if time_vec.is_empty() {
+    if duration_vec.is_empty() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Speed vector is empty, cannot calculate mean and standard deviation"));
     }
-    
+
     // Calculate the mean of the vector
-    let mut tot_time = uom::si::f64::Time::new::<uom::si::time::day>(0.0);
+    let mut tot_duration = time::Duration::new(0, 0);
 
     // loop through vector, add all values to the total
-    for time in time_vec {
-        tot_time = tot_time + *time;
+    for duration in duration_vec {
+        tot_duration = tot_duration + *duration;
     }
     // Find mean
-    let time_mean: uom::si::f64::Time = tot_time / time_vec.len() as f64;
-    let time_mean_f64: f64 = time_mean.get::<uom::si::time::day>();
+    let duration_mean = tot_duration.checked_div(duration_vec.len() as i32).unwrap();
 
     // Calculate the standard deviation of the vector
-    let mut variance: f64 = 0.0;
+    let mut variance: i64 = 0;
 
     // loop through vector, add all values to variance, then divide by number of values -1 to create variance
-    for time in time_vec {
-        variance = variance + (time.get::<uom::si::time::day>() - time_mean_f64).powi(2);
+    for duration in duration_vec {
+        let multiplier = duration.checked_sub(duration_mean).expect("Could not subtract value from time::Duration. Maybe an overflow occurred?").whole_seconds();
+        variance = variance + multiplier*multiplier;
     }
-    variance = variance / ((time_vec.len() - 1) as f64);
+    let variance_f64 = (variance as f64) / ((duration_vec.len() - 1) as f64);
 
     // Find standard deviation from variance
-    let time_std: uom::si::f64::Time = uom::si::f64::Time::new::<uom::si::time::day>(variance.sqrt());
+    let duration_std = time::Duration::new((variance_f64).sqrt() as i64, 0);
 
     // Return the mean and standard deviation
-    return Ok((time_mean, time_std));
+    return Ok((duration_mean, duration_std));
 }
 
 

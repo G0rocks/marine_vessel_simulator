@@ -17,7 +17,7 @@ pub struct SailingLeg {
 /// Struct to hold ship long entry
 #[derive(Debug)]
 pub struct ShipLogEntry {
-    pub timestamp: Timestamp,
+    pub timestamp: time::UtcDateTime,
     pub coordinates_initial: geo::Point,
     pub coordinates_current: geo::Point,
     pub coordinates_final: geo::Point,

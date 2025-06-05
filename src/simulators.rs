@@ -1,3 +1,5 @@
+use time::UtcDateTime;
+
 /// Everything Simulator related for the Marine vessel simulator that simulates the behaviour of marine vessels out at sea.
 /// Author: G0rocks
 /// Date: 2025-05-27
@@ -26,9 +28,9 @@ pub struct Simulation {
     /// The simulation method to use
     pub simulation_method: SimMethod,
     /// Start times for the simulation
-    pub start_times: Vec<Timestamp>,
+    pub start_times: Vec<time::UtcDateTime>,
     /// The time step for the simulation in days
-    pub time_step: f64, // Time step for the simulation in days
+    pub time_step: time::Duration, // Time step for the simulation in seconds
     /// The maximum number of iterations for the simulation
     pub max_iterations: usize, // Maximum number of iterations for the simulation
     /// Weather data file for the simulation
@@ -38,7 +40,7 @@ pub struct Simulation {
 
 impl Simulation {
     /// Creates a new simulation with the given parameters
-    pub fn new(simulation_method: SimMethod, start_times: Vec<Timestamp>, time_step: f64, max_iterations: usize, weather_data_file: Option<String>) -> Self {
+    pub fn new(simulation_method: SimMethod, start_times: Vec<UtcDateTime>, time_step: time::Duration, max_iterations: usize, weather_data_file: Option<String>) -> Self {
         Simulation {
             simulation_method,
             start_times,
@@ -76,7 +78,7 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
 /// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
-pub fn sim_waypoint_mission(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Check if the boat has a route plan, if no route plan
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat has no route plan"));
@@ -125,7 +127,7 @@ pub fn sim_waypoint_mission(boat: &mut Boat, start_time: Timestamp, simulation: 
 // Simulators
 //----------------------------------------------------
 /// Simulates the boat using constant velocity (uses boat.mean_velocity)
-pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that boat has mean velocity set
     if boat.velocity_mean.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing mean velocity"));
@@ -147,7 +149,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
     // Get final location to last waypoint
     let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
     let new_log_entry: ShipLogEntry = ShipLogEntry {
-        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
+        timestamp: time::UtcDateTime::new(time::Date::from_calendar_date(start_time.year(), start_time.month(), start_time.day()).expect("Couldn't make time::Date"), time::Time::from_hms(start_time.hour(), start_time.minute(), start_time.second()).expect("Couldn't make time::Time")),
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
@@ -161,7 +163,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
         // Simulate the boat moving towards the next waypoint
         // Get distance traveled in time step
         // travel_dist = boat.velocity_mean.unwrap() * time_step;
-        travel_dist = boat.velocity_mean.unwrap() * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        travel_dist = boat.velocity_mean.unwrap() * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step.as_seconds_f64()); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
 
         // While still have some distance left to travel during time step
         while travel_dist.get::<uom::si::length::meter>() > 0.0 {
@@ -181,7 +183,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
                     // Update ship logs with last point
                     let new_log_entry: ShipLogEntry = ShipLogEntry {
                         // Set timestamp to last shiplogentry + time step
-                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(simulation.time_step),
+                        timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Couldn't add seconds, probably an overflow occured"),
                         // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
                         //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                         coordinates_initial: coordinates_initial,
@@ -215,7 +217,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
 
                 // Log the new location to the ship log
                 let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    timestamp: start_time.add_days(((i + 1) as f64)*simulation.time_step),
+                    timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply, an overflow error probably occurred")).expect("Could not add timestep, an overflow probably occurred"),
                     // timestamp: start_time + ((i + 1) as f64)*time_step,
                     // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                     coordinates_initial: coordinates_initial,
@@ -240,7 +242,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: Times
 
 
 /// Simulates the boat using mean and standard deviation velocity (uses boat.mean_velocity and boat.std_velocity)
-pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that boat has mean and std velocity set
     if boat.velocity_mean.is_none() || boat.velocity_std.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing mean or standard deviation velocity"));
@@ -264,7 +266,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
     // Get final location to last waypoint
     let coordinates_final = boat.route_plan.as_ref().expect("Route plan missing?")[total_legs - 1].p2;                
     let new_log_entry: ShipLogEntry = ShipLogEntry {
-        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
+        timestamp: time::UtcDateTime::new(time::Date::from_calendar_date(start_time.year(), start_time.month(), start_time.day()).expect("Could not make time::Date from values"), time::Time::from_hms(start_time.hour(), start_time.minute(), start_time.second()).expect("Could not make time::Time from values")),
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
@@ -281,7 +283,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
         working_velocity = boat.velocity_mean.unwrap() + uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(rand::random_range(-1.0..=1.0) * boat.velocity_std.unwrap().get::<uom::si::velocity::meter_per_second>());
 
         // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(simulation.time_step.whole_seconds() as f64); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
 
         // While still have some distance left to travel during time step
         while travel_dist.get::<uom::si::length::meter>() > 0.0 {
@@ -301,7 +303,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
                     // Update ship logs with last point
                     let new_log_entry: ShipLogEntry = ShipLogEntry {
                         // Set timestamp to last shiplogentry + time step
-                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(simulation.time_step),
+                        timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow happened?"),
                         // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
                         //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                         coordinates_initial: coordinates_initial,
@@ -335,7 +337,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
 
                 // Log the new location to the ship log
                 let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    timestamp: start_time.add_days(((i + 1) as f64)*simulation.time_step),
+                    timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply time::Duration with value. Maybe an overflow occurred?")).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
                     // timestamp: start_time + ((i + 1) as f64)*time_step,
                     // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                     coordinates_initial: coordinates_initial,
@@ -361,7 +363,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: T
 /// Simulates the boat using weather data from file
 /// NOTE: Currently uses 5 m/s blowing in from the north as a placeholder for the weather data
 /// Note: Tacking width is the total width around the center of leg line for each leg.
-pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: Timestamp, simulation: &Simulation) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that necessary fields are set
     if simulation.weather_data_file.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather data file name from simulation"));
@@ -400,7 +402,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     // Get final location to last waypoint
     let coordinates_final = boat.route_plan.as_ref().unwrap()[total_legs - 1].p2;                
     let new_log_entry: ShipLogEntry = ShipLogEntry {
-        timestamp: Timestamp::new(start_time.year, start_time.month, start_time.day, start_time.hour, start_time.minute, start_time.second),
+        timestamp: time::UtcDateTime::new(time::Date::from_calendar_date(start_time.year(), start_time.month(), start_time.day()).expect("Could not make time::Date from values"), time::Time::from_hms(start_time.hour(), start_time.minute(), start_time.second()).expect("Could not make time::Time from values")),
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
@@ -428,6 +430,11 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // Get weather data for current location from weather data file
         // Wind speed and direction
         // ToDO
+        //--start-datetime 2009-10-31T23:00:00
+        // --end-datetime 2009-10-31T23:00:00
+        //let wind_test = copernicusmarine_rs::subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], time::UtcDateTime::now(), time::UtcDateTime::now(), -7.6, -7.6, -7.6, -7.6);
+        // println!("COPERNICUS PRINTOUT: {:?}", wind_test);
+
 
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -498,7 +505,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
 
 
         // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(simulation.time_step.whole_seconds() as f64); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
         
         
 
@@ -520,9 +527,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
                     // Update ship logs with last point
                     let new_log_entry: ShipLogEntry = ShipLogEntry {
                         // Set timestamp to last shiplogentry + time step
-                        timestamp: boat.ship_log.last().unwrap().timestamp.add_days(simulation.time_step),
-                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
-                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
+                        timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
                         coordinates_initial: coordinates_initial,
                         coordinates_current: boat.location.unwrap(),
                         coordinates_final: coordinates_final,
@@ -546,11 +551,13 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
                 // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
                 new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
                 // If new location is further away from leg line than half of tacking width, tack before moving
+                let min_dist_to_leg_line = min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, new_location);
 
-                if tacking_width < min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, new_location) {
+                if tacking_width <  min_dist_to_leg_line {
                     boat.tack(wind.angle);
                     // print debug message current distance to leg line
-                    println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
+                    // println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
+                    // println!("Min dist from new loacation to leg line: {:.1} km", min_dist_to_leg_line.get::<uom::si::length::kilometer>());
                     new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
                 }
 
@@ -560,7 +567,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
 
                 // Log the new location to the ship log
                 let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    timestamp: start_time.add_days(((i + 1) as f64)*simulation.time_step),
+                    timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply time::Duration with value")).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
                     // timestamp: start_time + ((i + 1) as f64)*time_step,
                     // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                     coordinates_initial: coordinates_initial,
