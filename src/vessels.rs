@@ -146,8 +146,6 @@ impl Boat {
     /// Tacks the boat to the other side
     /// Switches the preferred wind side and sets the heading to the minimum angle of attack with respect to the wind angle and the new preferred wind side.
     pub fn tack(&mut self, wind_angle: f64) {
-        // Print debug message
-        println!("Tacking the boat to the other side\n Current location {:?}", self.location);
         // Switch preferred wind side
         self.wind_preferred_side.switch();
         // Set heading to the minimum angle of attack with respect to the wind angle 

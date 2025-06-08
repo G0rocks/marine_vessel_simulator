@@ -35,18 +35,20 @@ pub struct Simulation {
     pub max_iterations: usize, // Maximum number of iterations for the simulation
     /// Weather data file for the simulation
     pub weather_data_file: Option<String>, // Weather data file for the simulation
-    // TODO: Add Copernicus information
+    /// Copernicus information
+    pub copernicus: Option<copernicusmarine_rs::Copernicus>,
 }
 
 impl Simulation {
     /// Creates a new simulation with the given parameters
-    pub fn new(simulation_method: SimMethod, start_times: Vec<UtcDateTime>, time_step: time::Duration, max_iterations: usize, weather_data_file: Option<String>) -> Self {
+    pub fn new(simulation_method: SimMethod, start_times: Vec<UtcDateTime>, time_step: time::Duration, max_iterations: usize, weather_data_file: Option<String>, copernicus: Option<copernicusmarine_rs::Copernicus>) -> Self {
         Simulation {
             simulation_method,
             start_times,
             time_step,
             max_iterations,
             weather_data_file,
+            copernicus
         }
     }
 }
@@ -368,6 +370,9 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     if simulation.weather_data_file.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather data file name from simulation"));
     }
+    if simulation.copernicus.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing copernicus info from simulation"))
+    }
     if boat.mass.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing mass from boat"));
     }
@@ -377,12 +382,12 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     if boat.min_angle_of_attack.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing minimum angle of attack from boat"));
     }
-    // if boat.hull_drag_coefficient.is_none() {
-    //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
-    // }
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
     }
+    // if boat.hull_drag_coefficient.is_none() {
+    //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
+    // }
 
     // Set boats current location to the first waypoint
     boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
@@ -430,10 +435,9 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // Get weather data for current location from weather data file
         // Wind speed and direction
         // ToDO
-        //--start-datetime 2009-10-31T23:00:00
-        // --end-datetime 2009-10-31T23:00:00
-        //let wind_test = copernicusmarine_rs::subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], time::UtcDateTime::now(), time::UtcDateTime::now(), -7.6, -7.6, -7.6, -7.6);
-        // println!("COPERNICUS PRINTOUT: {:?}", wind_test);
+        let boat_time_now = boat.ship_log.last().unwrap().timestamp;
+        let wind_test = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
+        println!("COPERNICUS PRINTOUT: {:?}", wind_test);
 
 
         // Compute heading

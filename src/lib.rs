@@ -530,45 +530,6 @@ pub fn timestamp_to_string(time_stamp: uom::si::f64::Time) -> String {
     return time_string;
 }
 
-
-// Finds out how many days have passed in the year since first of january that year until the beginning of the given month
-fn days_from_month(month: u8, year: i32) -> uom::si::f64::Time {
-    // Check if the month is valid
-    if (month < 1) || (month > 12) {
-        panic!("Invalid month");
-    }
-
-    // Init days
-    let mut days: u64 = 0;
-
-    // for each month, add number of days in month to days
-    for i in 1..month {
-        match i {
-            1 => days += 31,    // 31 days in January
-            2 => days += 28,    // 28 days in February, leap year is handled later
-            3 => days += 31,    // 31 days in March
-            4 => days += 30,    // 30 days in April
-            5 => days += 31,    // 31 days in May
-            6 => days += 30,    // 30 days in June
-            7 => days += 31,    // 31 days in July
-            8 => days += 31,    // 31 days in August
-            9 => days += 30,    // 30 days in September
-            10 => days += 31,   // 31 days in October
-            11 => days += 30,   // 30 days in November
-            12 => days += 31,   // 31 days in December
-            _ => panic!("Invalid month"),
-        }
-    }
-
-    // If leap year and after january and february, add 1 day to February
-    if year_helper::is_leap_year(year) && (month > 2) {
-        days += 1;
-    }
-
-    // Return the number of days
-    return uom::si::f64::Time::new::<uom::si::time::day>(days as f64);
-}
-
 /// Finds out which month of the year it is given the day number and year (in case it is a leap year)
 pub fn month_from_day(day_of_year: u16, year: i32) -> (u8, u16) {
     let mut days_left: u16 = day_of_year;
