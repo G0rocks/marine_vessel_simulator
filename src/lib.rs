@@ -975,6 +975,23 @@ pub fn geo_point_to_xy(point_in: geo::Point) -> (f32, f32) {
 }
 
 
+/// Function that gets the wind angle from north given the northward wind speed and eastward wind speed
+pub fn north_angle_from_north_and_eastward_wind(eastward: f64, northward: f64) -> f64 {
+    let atan_result = northward.atan2(eastward) * 180.0 / std::f64::consts::PI;
+
+    let mut north_angle = 90.0-atan_result;
+
+    // Adjusting if went out of bounds
+    while north_angle >= 360.0 {
+        north_angle -= 360.0;
+    }
+    while north_angle < 0.0 {
+        north_angle += 360.0;
+    }
+
+    return north_angle;
+}
+
 
 
 

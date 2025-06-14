@@ -481,7 +481,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_east = wind_east*0.01;
         let wind_north: f64 = north_data[0].into();
         let wind_north = wind_north * 0.01;
-        let angle: f64 = 360.0 + wind_east.atan2(wind_north) * 180.0 / std::f64::consts::PI;  // Angle in degrees
+        let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
+        
         println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
@@ -557,8 +558,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // todo: implement properly
-        working_velocity = wind.speed;
-        working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
+        working_velocity = wind.speed*0.8;
+        // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
         // boat.velocity_current = Some(working_velocity);
