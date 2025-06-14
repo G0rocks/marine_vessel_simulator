@@ -60,12 +60,17 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
 
-    // Init progress bar
-    println!("Simulating waypoint missions");
+    // Init progress bar with ETA and elapsed time
     let num_sims = simulation.start_times.len();
     let bar = indicatif::ProgressBar::new(num_sims as u64);
     // Set progress bar
+    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} {msg}").unwrap()); //ETA:{eta:>1} {msg}").unwrap()); //.progress_chars("##-"));
+    bar.set_message("Simulating");
+    bar.enable_steady_tick(std::time::Duration::from_millis(500));
     bar.inc(0);
+
+    // Time format
+    let time_format = time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").unwrap();
     
     // Runs sim_waypoint_mission for each start time in start_times
     for (i, start_time) in simulation.start_times.iter().enumerate() {
@@ -79,9 +84,12 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
                 return Err(io::Error::new(io::ErrorKind::Other, format!("Error during simulation {}: {}", i.to_string(), e)));
             }
         }
-
-        // Update progress bad
+        // Update progress bar
         bar.inc(1);
+        // bar.tick();
+        bar.set_message("Catch me if you can!");
+        let eta = bar.eta();
+        bar.set_message(format!("ETA:{:16}", time::UtcDateTime::now().checked_add(time::Duration::seconds(eta.as_secs() as i64)).expect("Could not calculate ETA").format(&time_format).unwrap()));
     }
     // Finish progress bar
     bar.finish();
@@ -487,8 +495,32 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // println!("east wind 1: {:.02}", 0.01*east_data[0]);
         // println!("north wind 1: {:.02}", 0.01*north_data[0]);
 
-        // Todo: Delete downloaded file before leaving directory to conserve available storage space on computer
-        // std::fs::remove_file(nc_filename.clone()).expect(&format!("Could not delete file {}", &nc_filename));
+        // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
+        // Copy netcdf_file name
+        let filename = netcdf_file.path().expect("Could not get netcdf file path").clone();
+        // Stop using netcdf_file so it can be deleted
+        netcdf_file.close().expect("Could not close netcdf file");
+        // Move into output path directory
+        let start_dir = std::env::current_dir().expect("Could not get current directory");
+        // Change directory
+        std::env::set_current_dir(std::path::Path::new(&simulation.copernicus.clone().unwrap().output_path)).expect("Error changing directories");
+        // Try to delete the file
+        match std::fs::remove_file(&filename) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Could not delete file {:?}: {}", &filename, e);
+                    let f = std::fs::File::open(filename)?;
+                    let metadata = f.metadata().expect("Oh no, NO METADATA FOUND!");
+                    let permissions = metadata.permissions();
+                println!("Permissions: {:?}", permissions);
+            }
+        }
+
+        // Move back into starting directory
+        std::env::set_current_dir(start_dir).expect("Error changing directories");
+
+
+
 
         let wind_east: f64 = east_data[0].into();
         let wind_east = wind_east*0.01;

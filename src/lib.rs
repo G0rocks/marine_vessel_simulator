@@ -24,6 +24,10 @@ pub use crate::simulators::*; // Import the simulators module
 pub mod vessels;
 pub use crate::vessels::*; // Import the simulators module
 
+// Constants
+//----------------------------------------------------
+
+
 // Structs and enums
 //----------------------------------------------------
 /// Struct that holds wind data
