@@ -59,6 +59,14 @@ impl Simulation {
 pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result<Vec<String>, io::Error> {
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
+
+    // Init progress bar
+    println!("Simulating waypoint missions");
+    let num_sims = simulation.start_times.len();
+    let bar = indicatif::ProgressBar::new(num_sims as u64);
+    // Set progress bar
+    bar.inc(0);
+    
     // Runs sim_waypoint_mission for each start time in start_times
     for (i, start_time) in simulation.start_times.iter().enumerate() {
         match sim_waypoint_mission(boat, *start_time, simulation) {
@@ -71,7 +79,12 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
                 return Err(io::Error::new(io::ErrorKind::Other, format!("Error during simulation {}: {}", i.to_string(), e)));
             }
         }
+
+        // Update progress bad
+        bar.inc(1);
     }
+    // Finish progress bar
+    bar.finish();
 
     // Run successful, return Ok(sim_msg_vec)
     return Ok(sim_msg_vec);
@@ -456,21 +469,21 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let netcdf_root =  netcdf_file.root().expect("Could not get netcdf root from netcdf file");
 
         // Get variables from netcdf file
-        let time_stamp = netcdf_root.variable("time").expect("No variable: time");
-        let lat = netcdf_root.variable("latitude").expect("No variable: latitude");
-        let lon = netcdf_root.variable("longitude").expect("No variable: longitude");
+        // let time_stamp = netcdf_root.variable("time").expect("No variable: time");
+        // let lat = netcdf_root.variable("latitude").expect("No variable: latitude");
+        // let lon = netcdf_root.variable("longitude").expect("No variable: longitude");
         let east = netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
         let north = netcdf_root.variable("northward_wind").expect("No northward_wind var");
 
         // Get data vectors from variables
-        let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
-        let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
-        let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        //let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
+        //let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        //let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         let east_data: Vec<f32> = east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         let north_data: Vec<f32> = north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
-        println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
-        println!("Latitude 1: {:?}", lat_data[0]);
-        println!("Longitude 1: {:?}", lon_data[0]);
+        // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
+        // println!("Latitude 1: {:?}", lat_data[0]);
+        // println!("Longitude 1: {:?}", lon_data[0]);
         // println!("east wind 1: {:.02}", 0.01*east_data[0]);
         // println!("north wind 1: {:.02}", 0.01*north_data[0]);
 
@@ -483,11 +496,11 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_north = wind_north * 0.01;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
         
-        println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
+        // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
         // println!("WIND TEST: {:?}", wind_test);
-        println!("WIND TEST: {:?}", wind);
+        // println!("WIND TEST: {:?}", wind);
 
 
         // todo!("Fix angle calculations!");    // Todo verify angle calculation

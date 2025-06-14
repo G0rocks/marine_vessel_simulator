@@ -15,6 +15,8 @@ use plotters::prelude::*; // Plotters for visualizing data
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
 use time;   // To do time calculations
+use indicatif;   // For progress bar
+
 
 // Internal modules
 pub mod simulators;
@@ -416,7 +418,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     for leg in &route_plan {
         // Get point half a tacking width to the left and right of the leg
         let bearing = Haversine.bearing(leg.p1, leg.p2);
-        println!("Bearing: {:?}", bearing - 90.0);
+        // println!("Bearing: {:?}", bearing - 90.0);
         // Get the left and right points
         let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
         //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
