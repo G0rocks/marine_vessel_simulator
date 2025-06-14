@@ -25,6 +25,7 @@ pub use crate::vessels::*; // Import the simulators module
 // Structs and enums
 //----------------------------------------------------
 /// Struct that holds wind data
+#[derive(Debug)]
 pub struct Wind {
     /// Wind speed
     pub speed: uom::si::f64::Velocity,

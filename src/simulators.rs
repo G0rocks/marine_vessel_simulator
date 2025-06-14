@@ -13,10 +13,10 @@ pub enum SimMethod {
     ConstVelocity,
     /// Use the mean and std of the boat speed
     MeanAndSTDVelocity,
-    /// Use downloaded weather data from file
-    WeatherDataFromFile,
-    // Use the copernicus weather data from the past for the exact location of the boat to simulate the boat movements
-    // Copernicus_Weather_Data,
+    // Use downloaded weather data from file
+    // WeatherDataFromFile,
+    /// Use the copernicus weather data from the past for the exact location of the boat to simulate the boat movements
+    WeatherDataFromCopernicus,
     // Use the copernicus weather forecast data for the exact location of the boat to simulate the boat movements
     // Copernicus_Weather_Forecast,
 }
@@ -110,9 +110,20 @@ pub fn sim_waypoint_mission(boat: &mut Boat, start_time: time::UtcDateTime, simu
                 }
             }
         }
-        SimMethod::WeatherDataFromFile => {
-            // Simulate the boat using weather data from file
-            match sim_waypoint_mission_weather_data_from_file(boat, start_time, simulation) {
+        // SimMethod::WeatherDataFromFile => {
+        //     // Simulate the boat using weather data from file
+        //     match sim_waypoint_mission_weather_data_from_file(boat, start_time, simulation) {
+        //         Ok(sim_msg) => {
+        //             return Ok(sim_msg);
+        //         }
+        //         Err(e) => {
+        //             return Err(e);
+        //         }
+        //     }
+        // }
+        SimMethod::WeatherDataFromCopernicus => {
+            // Simulate the boat using weather data from Copernicus
+            match sim_waypoint_mission_weather_data_from_copernicus(boat, start_time, simulation) {
                 Ok(sim_msg) => {
                     return Ok(sim_msg);
                 }
@@ -365,7 +376,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
 /// Simulates the boat using weather data from file
 /// NOTE: Currently uses 5 m/s blowing in from the north as a placeholder for the weather data
 /// Note: Tacking width is the total width around the center of leg line for each leg.
-pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
+pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that necessary fields are set
     if simulation.weather_data_file.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather data file name from simulation"));
@@ -385,6 +396,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
     }
+    // Todo: Add drag
     // if boat.hull_drag_coefficient.is_none() {
     //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
     // }
@@ -417,7 +429,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
     boat.ship_log.push(new_log_entry);
 
     // Init wind vector
-    let wind: Wind = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), 0.0); // Placeholder for wind speed, should be replaced with actual weather data from file
+    let mut wind: Wind; // = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), 0.0); // Placeholder for wind speed, should be replaced with actual weather data from file
     // Init next waypoint
     let mut next_waypoint: geo::Point;
     let mut bearing_to_next_waypoint: f64;
@@ -436,8 +448,53 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // Wind speed and direction
         // ToDO
         let boat_time_now = boat.ship_log.last().unwrap().timestamp;
-        let wind_test = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
-        println!("COPERNICUS PRINTOUT: {:?}", wind_test);
+        let longitude: f64 = boat.location.expect("Boat has no location").x();
+        let latitude: f64 = boat.location.expect("Boat has no location").y();
+        // let netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
+        
+        let netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
+        let netcdf_root =  netcdf_file.root().expect("Could not get netcdf root from netcdf file");
+
+        // Get variables from netcdf file
+        let time_stamp = netcdf_root.variable("time").expect("No variable: time");
+        let lat = netcdf_root.variable("latitude").expect("No variable: latitude");
+        let lon = netcdf_root.variable("longitude").expect("No variable: longitude");
+        let east = netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
+        let north = netcdf_root.variable("northward_wind").expect("No northward_wind var");
+
+        // Get data vectors from variables
+        let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
+        let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        let east_data: Vec<f32> = east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let north_data: Vec<f32> = north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
+        println!("Latitude 1: {:?}", lat_data[0]);
+        println!("Longitude 1: {:?}", lon_data[0]);
+        // println!("east wind 1: {:.02}", 0.01*east_data[0]);
+        // println!("north wind 1: {:.02}", 0.01*north_data[0]);
+
+        // Todo: Delete downloaded file before leaving directory to conserve available storage space on computer
+        // std::fs::remove_file(nc_filename.clone()).expect(&format!("Could not delete file {}", &nc_filename));
+
+        let wind_east: f64 = east_data[0].into();
+        let wind_east = wind_east*0.01;
+        let wind_north: f64 = north_data[0].into();
+        let wind_north = wind_north * 0.01;
+        let angle: f64 = 360.0 + wind_east.atan2(wind_north) * 180.0 / std::f64::consts::PI;  // Angle in degrees
+        println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
+        let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
+        wind = Wind::new(wind_speed, angle);
+        // println!("WIND TEST: {:?}", wind_test);
+        println!("WIND TEST: {:?}", wind);
+
+
+        // todo!("Fix angle calculations!");    // Todo verify angle calculation
+
+        //Todo: Let's only run once while debugging
+        // panic!("Stop run");
+
+
 
 
         // Compute heading
@@ -479,7 +536,7 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
 
 
 
-        
+        // Todo: use weather data to compute boats actual velocity
         // Find total force on boat
         // force on boat from wind
         // let wind_force: uom::si::f64::Force = uom::si::f64::Force::new::<uom::si::force::newton>(5.0);
@@ -499,6 +556,8 @@ pub fn sim_waypoint_mission_weather_data_from_file(boat: &mut Boat, start_time: 
         // let final_velocity: uom::si::f64::Velocity = a * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // final_velocity in meters per second
 
         // Working velocity is initial velocity plus final velocity divided by 2
+        // todo: implement properly
+        working_velocity = wind.speed;
         working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat

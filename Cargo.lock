@@ -1314,6 +1314,7 @@ dependencies = [
  "csv",
  "geo",
  "io",
+ "netcdf",
  "plotly",
  "plotters",
  "rand",
@@ -1378,9 +1379,9 @@ dependencies = [
 
 [[package]]
 name = "netcdf-sys"
-version = "0.8.2"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c631ed9272beb24e646964d52f1ce7a207f00e4ebc5d907527367fe703fe647"
+checksum = "6fb81047c7e146ae97620a1523e5fd136d53efb2c4aaaf34222fdacad8a5913c"
 dependencies = [
  "hdf5-metno-sys",
  "libz-sys",
