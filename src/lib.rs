@@ -11,7 +11,7 @@ use uom::{self};    // Units of measurement. Makes sure that the correct units a
 use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::{io}; // To use errors
-use plotters::prelude::*; // Plotters for visualizing data
+// use plotters; // Plotters for visualizing data on a map. Uses only rust, no javascript. Will probably be removed in favor of plotly
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
 use time;   // To do time calculations
@@ -233,91 +233,92 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 }
 
 
-/// Function for visualizing shipping_logs
-/// The starting point is green and the final point is red, the coordinates of those points are shown in the figure.
-/// Note: Currently plots to a flat X-Y plane, so the coordinates are not projected onto a globe.
-/// ship_logs_file_path: Path to the CSV file where the ship logs are stored
-/// figure_file_path: Path to the file where the figure will be saved
-/// Example:
-pub fn visualize_ship_logs_rust_only(ship_logs_file_path: &str, figure_file_path: &str) -> Result<(), io::Error>{
-    // Read the CSV file
-    let mut csv_reader = csv::ReaderBuilder::new()
-        .delimiter(b';')
-        .has_headers(true)
-        .from_path(ship_logs_file_path)
-        .expect("Failed to open the file");
+// Function for visualizing shipping_logs
+// The starting point is green and the final point is red, the coordinates of those points are shown in the figure.
+// Note: Currently plots to a flat X-Y plane, so the coordinates are not projected onto a globe.
+// ship_logs_file_path: Path to the CSV file where the ship logs are stored
+// figure_file_path: Path to the file where the figure will be saved
+// Example:
+//pub fn visualize_ship_logs_rust_only(ship_logs_file_path: &str, figure_file_path: &str) -> Result<(), io::Error>{
+//    // Read the CSV file
+//    let mut csv_reader = csv::ReaderBuilder::new()
+//        .delimiter(b';')
+//        .has_headers(true)
+//        .from_path(ship_logs_file_path)
+//        .expect("Failed to open the file");
+//
+//    // Init figure
+//    let figure = BitMapBackend::new(figure_file_path, (640, 480)).into_drawing_area();
+//
+//    figure.fill(&RGBColor(255, 255, 255)).expect("Failed to fill background");
+//
+//    let figure = figure.apply_coord_spec(Cartesian2d::<plotters::coord::types::RangedCoordf32, plotters::coord::types::RangedCoordf32>::new(
+//        0f32..1f32,
+//        0f32..1f32,
+//        (0..640, 0..480),
+//    ));
+//
+//    let dot_and_label = |x: f32, y: f32, lat: f64, lon: f64, color: plotters::style::RGBColor | {
+//        return EmptyElement::at((x, y))
+//            + Circle::new((0, 0), 3, ShapeStyle::from(&color).filled())
+//            + Text::new(
+//                format!("({:.2},{:.2})", lat, lon),
+//                (10, 0),
+//                ("sans-serif", 15.0).into_font(),
+//            );
+//    };
+//
+//    let dot = |x: f32, y: f32| {
+//    return EmptyElement::at((x, y))
+//        + Circle::new((0, 0), 1, ShapeStyle::from(&BLACK).filled());
+//    };
+//
+//    // Iterate through each line of the CSV file to draw the values
+//    for (i, result) in csv_reader.records().enumerate() {
+//        match result {
+//            Ok(log_entry) => {
+//                // Get all values in row as usable data
+//                // let timestamp = log_entry.get(0).expect("No timestamp found").to_string();
+//                let coordinates_current = string_to_point(log_entry.get(2).expect("No current coordinate found").to_string());
+//                // let cargo_on_board = log_entry.get(4).unwrap().to_string();
+//
+//                // if first value, draw initial and final coordinates
+//                if i == 0 {
+//                    // Get coordinates
+//                    let coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
+//                    let coordinates_final = string_to_point(log_entry.get(3).expect("No final coordinate found").to_string());
+//
+//                    // Draw initial coordinate
+//                    let (x,y) = geo_point_to_xy(coordinates_initial);
+//                    figure.draw(&dot_and_label(x, y, coordinates_initial.y(), coordinates_initial.x(), GREEN)).expect("Failed to draw dot and label");
+//
+//                    // Draw final coordinate
+//                    let (x,y) = geo_point_to_xy(coordinates_final);
+//                    figure.draw(&dot_and_label(x, y, coordinates_final.y(), coordinates_final.x(), RED)).expect("Failed to draw dot and label");
+//                }
+//
+//                // Draw point on figure. Each coordinate must be represented by a value between 0 and 1, so we need to convert the coordinates to a value between 0 and 1
+//                // x = 0 is the left side, x = 1 is the right side, y = 0 is the top, y = 1 is the bottom
+//                // figure.draw(&dot_and_label(0.5, 0.6)).expect("Failed to draw dot and label");
+//                let (x, y) = geo_point_to_xy(coordinates_current);
+//                figure.draw(&dot(x, y)).expect("Failed to draw dot");
+//            }
+//            Err(err) => {
+//                eprintln!("Error reading log_entry: {}", err);
+//            }
+//        } // End match
+//    } // End for loop
+//
+//    // TODO: Figure out what this does
+//    figure.present().expect("Failed to present the figure");
+//
+//
+//    // Save figure to file
+//
+//    // Return Ok if all went well
+//    return Ok(());
+//}
 
-    // Init figure
-    let figure = BitMapBackend::new(figure_file_path, (640, 480)).into_drawing_area();
-
-    figure.fill(&RGBColor(255, 255, 255)).expect("Failed to fill background");
-
-    let figure = figure.apply_coord_spec(Cartesian2d::<plotters::coord::types::RangedCoordf32, plotters::coord::types::RangedCoordf32>::new(
-        0f32..1f32,
-        0f32..1f32,
-        (0..640, 0..480),
-    ));
-
-    let dot_and_label = |x: f32, y: f32, lat: f64, lon: f64, color: plotters::style::RGBColor | {
-        return EmptyElement::at((x, y))
-            + Circle::new((0, 0), 3, ShapeStyle::from(&color).filled())
-            + Text::new(
-                format!("({:.2},{:.2})", lat, lon),
-                (10, 0),
-                ("sans-serif", 15.0).into_font(),
-            );
-    };
-
-    let dot = |x: f32, y: f32| {
-    return EmptyElement::at((x, y))
-        + Circle::new((0, 0), 1, ShapeStyle::from(&BLACK).filled());
-    };
-
-    // Iterate through each line of the CSV file to draw the values
-    for (i, result) in csv_reader.records().enumerate() {
-        match result {
-            Ok(log_entry) => {
-                // Get all values in row as usable data
-                // let timestamp = log_entry.get(0).expect("No timestamp found").to_string();
-                let coordinates_current = string_to_point(log_entry.get(2).expect("No current coordinate found").to_string());
-                // let cargo_on_board = log_entry.get(4).unwrap().to_string();
-
-                // if first value, draw initial and final coordinates
-                if i == 0 {
-                    // Get coordinates
-                    let coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
-                    let coordinates_final = string_to_point(log_entry.get(3).expect("No final coordinate found").to_string());
-
-                    // Draw initial coordinate
-                    let (x,y) = geo_point_to_xy(coordinates_initial);
-                    figure.draw(&dot_and_label(x, y, coordinates_initial.y(), coordinates_initial.x(), GREEN)).expect("Failed to draw dot and label");
-
-                    // Draw final coordinate
-                    let (x,y) = geo_point_to_xy(coordinates_final);
-                    figure.draw(&dot_and_label(x, y, coordinates_final.y(), coordinates_final.x(), RED)).expect("Failed to draw dot and label");
-                }
-
-                // Draw point on figure. Each coordinate must be represented by a value between 0 and 1, so we need to convert the coordinates to a value between 0 and 1
-                // x = 0 is the left side, x = 1 is the right side, y = 0 is the top, y = 1 is the bottom
-                // figure.draw(&dot_and_label(0.5, 0.6)).expect("Failed to draw dot and label");
-                let (x, y) = geo_point_to_xy(coordinates_current);
-                figure.draw(&dot(x, y)).expect("Failed to draw dot");
-            }
-            Err(err) => {
-                eprintln!("Error reading log_entry: {}", err);
-            }
-        } // End match
-    } // End for loop
-
-    // TODO: Figure out what this does
-    figure.present().expect("Failed to present the figure");
-
-
-    // Save figure to file
-
-    // Return Ok if all went well
-    return Ok(());
-}
 
 /// Visualize ship logs with plotly on map
 pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, _figure_file_path: &str) -> Result<(), io::Error> {

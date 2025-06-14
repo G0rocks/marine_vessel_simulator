@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- 
+- plotters?
 
 ## [0.1.1] - 2025-06-14
 Second release, now the crate has some simulative capabilities! Woohoo!
@@ -42,7 +42,8 @@ Second release, now the crate has some simulative capabilities! Woohoo!
 
 ### Removed
 
-- main.rs since it was not
+- main.rs since it was not being used
+- plotters has been commented out, since plotly is easier to use and has more capabilities
 
 
 ## [0.1.0] - 2025-04-30
