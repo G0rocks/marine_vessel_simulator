@@ -69,5 +69,6 @@ Looking forward to having some more capabilities.
 
 
 ## List of releases
-[unreleased]: https://github.com/G0rocks/marine_vessel_simulator/blob/main/Changelog.md
+[unreleased]: https://github.com/G0rocks/marine_vessel_simulator/compare/v0.1.0...main
+[0.1.1]: https://github.com/G0rocks/marine_vessel_simulator/releases/tag/v0.1.1
 [0.1.0]: https://github.com/G0rocks/marine_vessel_simulator/releases/tag/v0.1.0
