@@ -275,6 +275,8 @@ dependencies = [
 [[package]]
 name = "copernicusmarine_rs"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "804a13f23e5bdf2caafb72d9b22bdc4bd1c78b7bf88561d3e22ddc11d033d0c6"
 dependencies = [
  "netcdf",
  "serde",
