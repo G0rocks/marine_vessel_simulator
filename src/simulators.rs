@@ -492,8 +492,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
         // println!("Latitude 2: {:?}", lat_data[1]);
         // println!("Longitude 2: {:?}", lon_data[1]);
-        println!("east wind 2: {:.02}", 0.01*east_data[1]);
-        println!("north wind 2: {:.02}", 0.01*north_data[1]);
+        // println!("east wind 2: {:.02}", 0.01*east_data[1]);
+        // println!("north wind 2: {:.02}", 0.01*north_data[1]);
 
         // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
