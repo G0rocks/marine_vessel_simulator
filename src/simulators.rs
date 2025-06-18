@@ -484,16 +484,16 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let north = netcdf_root.variable("northward_wind").expect("No northward_wind var");
 
         // Get data vectors from variables
-        //let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
-        //let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
-        //let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        // let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
+        // let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
+        // let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         let east_data: Vec<f32> = east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         let north_data: Vec<f32> = north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
-        // println!("Latitude 1: {:?}", lat_data[0]);
-        // println!("Longitude 1: {:?}", lon_data[0]);
-        // println!("east wind 1: {:.02}", 0.01*east_data[0]);
-        // println!("north wind 1: {:.02}", 0.01*north_data[0]);
+        // println!("Latitude 2: {:?}", lat_data[1]);
+        // println!("Longitude 2: {:?}", lon_data[1]);
+        println!("east wind 2: {:.02}", 0.01*east_data[1]);
+        println!("north wind 2: {:.02}", 0.01*north_data[1]);
 
         // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
@@ -603,7 +603,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // todo: implement properly
-        working_velocity = wind.speed*0.8;
+        working_velocity = wind.speed*1.5;
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
