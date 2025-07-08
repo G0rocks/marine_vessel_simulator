@@ -1,5 +1,3 @@
-use time::UtcDateTime;
-
 /// Everything Simulator related for the Marine vessel simulator that simulates the behaviour of marine vessels out at sea.
 /// Author: G0rocks
 /// Date: 2025-05-27
@@ -64,7 +62,7 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     let num_sims = simulation.start_times.len();
     let bar = indicatif::ProgressBar::new(num_sims as u64);
     // Set progress bar
-    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} {msg}").unwrap()); //ETA:{eta:>1} {msg}").unwrap()); //.progress_chars("##-"));
+    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1} {msg}").unwrap()); //.progress_chars("##-"));
     bar.set_message("Simulating");
     bar.enable_steady_tick(std::time::Duration::from_millis(500));
     bar.inc(0);
@@ -471,45 +469,50 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let boat_time_now = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
-        // let netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
+        // let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
         
-        let netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
-        let netcdf_root =  netcdf_file.root().expect("Could not get netcdf root from netcdf file");
+        let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
+        let ocean_current_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
+
+
+        let wind_netcdf_root =  wind_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
 
         // Get variables from netcdf file
-        // let time_stamp = netcdf_root.variable("time").expect("No variable: time");
-        // let lat = netcdf_root.variable("latitude").expect("No variable: latitude");
-        // let lon = netcdf_root.variable("longitude").expect("No variable: longitude");
-        let east = netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
-        let north = netcdf_root.variable("northward_wind").expect("No northward_wind var");
+        // let time_stamp = wind_netcdf_root.variable("time").expect("No variable: time");
+        // let lat = wind_netcdf_root.variable("latitude").expect("No variable: latitude");
+        // let lon = wind_netcdf_root.variable("longitude").expect("No variable: longitude");
+        let wind_east = wind_netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
+        let wind_north = wind_netcdf_root.variable("northward_wind").expect("No northward_wind var");
 
         // Get data vectors from variables
         // let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
         // let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         // let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
-        let east_data: Vec<f32> = east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
-        let north_data: Vec<f32> = north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let wind_east_data: Vec<f32> = wind_east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let wind_north_data: Vec<f32> = wind_north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
         // println!("Latitude 2: {:?}", lat_data[1]);
         // println!("Longitude 2: {:?}", lon_data[1]);
-        // println!("east wind 2: {:.02}", 0.01*east_data[1]);
-        // println!("north wind 2: {:.02}", 0.01*north_data[1]);
+        // println!("east wind 2: {:.02}", wind_east_data[1]);
+        // println!("north wind 2: {:.02}", wind_north_data[1]);
+
+        // panic!("Stop run for debugging");
 
         // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
-        let filename = netcdf_file.path().expect("Could not get netcdf file path").clone();
+        let wind_filename = wind_netcdf_file.path().expect("Could not get netcdf file path").clone();
         // Stop using netcdf_file so it can be deleted
-        netcdf_file.close().expect("Could not close netcdf file");
+        wind_netcdf_file.close().expect("Could not close netcdf file");
         // Move into output path directory
         let start_dir = std::env::current_dir().expect("Could not get current directory");
         // Change directory
         std::env::set_current_dir(std::path::Path::new(&simulation.copernicus.clone().unwrap().output_path)).expect("Error changing directories");
         // Try to delete the file
-        match std::fs::remove_file(&filename) {
+        match std::fs::remove_file(&wind_filename) {
             Ok(_) => {}
             Err(e) => {
-                println!("Could not delete file {:?}: {}", &filename, e);
-                    let f = std::fs::File::open(filename)?;
+                println!("Could not delete file {:?}: {}", &wind_filename, e);
+                    let f = std::fs::File::open(wind_filename)?;
                     let metadata = f.metadata().expect("Oh no, NO METADATA FOUND!");
                     let permissions = metadata.permissions();
                 println!("Permissions: {:?}", permissions);
@@ -522,9 +525,9 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
 
 
-        let wind_east: f64 = east_data[0].into();
+        let wind_east: f64 = wind_east_data[0].into();
         let wind_east = wind_east*0.01;
-        let wind_north: f64 = north_data[0].into();
+        let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * 0.01;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
         
@@ -587,7 +590,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // force on boat from wind
         // let wind_force: uom::si::f64::Force = uom::si::f64::Force::new::<uom::si::force::newton>(5.0);
 
-        // Force from velocity of ocean current
+        // Velocity of ocean current. Assume that boat is moving with the current
 
         // Add forces together
         // let force_total: uom::si::f64::Force = wind_force; // + ocean_current_force; // Add other forces here
