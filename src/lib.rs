@@ -15,6 +15,7 @@ use std::{io}; // To use errors
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
 use time;   // To do time calculations
+use time::UtcDateTime;  // To use UtcDateTime
 use indicatif;   // For progress bar
 
 
