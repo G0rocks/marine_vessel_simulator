@@ -101,8 +101,8 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         // Update progress bar
         bar.inc(1);
         // If not interactive terminal, print progressbar manually
-        println!("Is interactive with !: {}", !is_interactive_terminal);
-        if !is_interactive_terminal {
+        println!("Is interactive with = false: {}", !is_interactive_terminal);
+        if is_interactive_terminal == false {
             println!("Elapsed: {} seconds, Steps {}/{}, ETA: {:?}", bar.elapsed().as_secs(), bar.position(), num_sims, bar.eta().as_secs());
         }
     }
