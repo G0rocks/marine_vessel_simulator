@@ -102,7 +102,7 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         bar.inc(1);
         // If not interactive terminal, print progressbar manually
         if !is_interactive_terminal {
-            println!("{:?}", bar);
+            println!("Elapsed: {:?}, {:?}/{}, ETA: {:?}", bar.elapsed(), bar.position(), num_sims, bar.eta());
         }
     }
     // Finish progress bar
@@ -563,7 +563,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             }
         }
 
-        // Move back into starting directory
+        // Move back into directory
         std::env::set_current_dir(start_dir).expect("Error changing directories");
 
 
