@@ -58,6 +58,8 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
 
+    println!("Cheeseburger!");
+
     println!("Atty::is(atty::steam: {} ", atty::is(atty::Stream::Stdout));
 
     // Init progress bar with ETA and elapsed time
