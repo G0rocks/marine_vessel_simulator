@@ -488,7 +488,12 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 /// let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");
 pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     // Remove all whitespaces in string
-    let working_str: &str = (&time_string[..]).trim();
+    let mut working_str: &str = (&time_string[..]).trim();
+
+    // If string is longer than 16 characters but shorter than 25, just take first 16 characters
+    if working_str.len() > 16 && working_str.len() < 25 {
+        working_str = &working_str[0..16];
+    }
 
     // Check if the string is valid
     if !((working_str.len() == 16) || (working_str.len() == 25)) {
