@@ -62,13 +62,9 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     let num_sims = simulation.start_times.len();
     let bar = indicatif::ProgressBar::new(num_sims as u64);
     // Set progress bar
-    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1} {msg}").unwrap()); //.progress_chars("##-"));
-    bar.set_message("Simulating");
+    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
     bar.enable_steady_tick(std::time::Duration::from_millis(500));
     bar.inc(0);
-
-    // Time format
-    let time_format = time::format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").unwrap();
     
     // Runs sim_waypoint_mission for each start time in start_times
     for (i, start_time) in simulation.start_times.iter().enumerate() {
@@ -84,10 +80,6 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         }
         // Update progress bar
         bar.inc(1);
-        // bar.tick();
-        bar.set_message("Catch me if you can!");
-        let eta = bar.eta();
-        bar.set_message(format!("ETA:{:16}", time::UtcDateTime::now().checked_add(time::Duration::seconds(eta.as_secs() as i64)).expect("Could not calculate ETA").format(&time_format).unwrap()));
     }
     // Finish progress bar
     bar.finish();
@@ -471,11 +463,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let latitude: f64 = boat.location.expect("Boat has no location").y();
         // let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
         
+        // Get wind and oc (ocean current) data from Copernicus
         let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
-        let ocean_current_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
-
+        // let oc_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
 
         let wind_netcdf_root =  wind_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
+        // let oc_netcdf_root =  oc_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
 
         // Get variables from netcdf file
         // let time_stamp = wind_netcdf_root.variable("time").expect("No variable: time");
@@ -483,20 +476,47 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // let lon = wind_netcdf_root.variable("longitude").expect("No variable: longitude");
         let wind_east = wind_netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
         let wind_north = wind_netcdf_root.variable("northward_wind").expect("No northward_wind var");
+        // let oc_east = oc_netcdf_root.variable("uo").expect("No variable: eastward_wind");
+        // let oc_north = oc_netcdf_root.variable("vo").expect("No northward_wind var");
+
+        let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_east_scale_factor = match wind_east_scale_factor_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f32,
+            _ => panic!("scale_factor was not a Double"),
+        };
+        println!("Scale factor for wind_east: {:?}", wind_east_scale_factor);
+
+        let wind_east_add_offset_attr_val = wind_east.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_east_add_offset = match wind_east_add_offset_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f32,
+            _ => panic!("scale_factor was not a Double"),
+        };
+        println!("Add offset for wind_east: {:?}", wind_east_add_offset);
+
+        // let wind_east_fill_value_attr_val = wind_east.attribute("fill_value").expect("No fill value found").value().expect("Could not get fill value");
+        // let wind_east_fill_value = match wind_east_fill_value_attr_val {
+        //     netcdf::AttributeValue::Double(v) => v as f32,
+        //     _ => panic!("fill_value was not a Double"),
+        // };
+        // println!("Fill value for wind_east: {:?}", wind_east_fill_value);
 
         // Get data vectors from variables
         // let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
         // let lat_data: Vec<f64> = lat.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         // let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         let wind_east_data: Vec<f32> = wind_east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
-        let wind_north_data: Vec<f32> = wind_north.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let wind_north_data: Vec<f32> = wind_north.get_values(netcdf::Extents::All).expect("Failed to read northward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        // let oc_east_data: Vec<f32> = oc_east.get_values(netcdf::Extents::All).expect("Failed to read eastward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        // let oc_north_data: Vec<f32> = oc_north.get_values(netcdf::Extents::All).expect("Failed to read northward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
-        // println!("Latitude 2: {:?}", lat_data[1]);
-        // println!("Longitude 2: {:?}", lon_data[1]);
+        // println!("Latitude: {:?}", lat_data[0]);
+        // println!("Longitude: {:?}", lon_data[0]);
         // println!("east wind 2: {:.02}", wind_east_data[1]);
         // println!("north wind 2: {:.02}", wind_north_data[1]);
-
-        // panic!("Stop run for debugging");
+        // println!("Wind east: {:.02}", wind_east_data[0]*wind_east_scale_factor + wind_east_add_offset);
+        // println!("Wind north: {:.02}", wind_north_data[0]*0.01);
+        // println!("Ocean current east: {:.02}", oc_east_data[0]);
+        // println!("Ocean current north: {:.02}", oc_north_data[0]);
 
         // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
@@ -523,6 +543,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         std::env::set_current_dir(start_dir).expect("Error changing directories");
 
 
+        // panic!("Stop run for debugging");
 
 
         let wind_east: f64 = wind_east_data[0].into();
