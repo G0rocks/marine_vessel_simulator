@@ -479,19 +479,19 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // let oc_east = oc_netcdf_root.variable("uo").expect("No variable: eastward_wind");
         // let oc_north = oc_netcdf_root.variable("vo").expect("No northward_wind var");
 
-        let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
-        let wind_east_scale_factor = match wind_east_scale_factor_attr_val {
-            netcdf::AttributeValue::Double(v) => v as f32,
-            _ => panic!("scale_factor was not a Double"),
-        };
-        println!("Scale factor for wind_east: {:?}", wind_east_scale_factor);
-
-        let wind_east_add_offset_attr_val = wind_east.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
-        let wind_east_add_offset = match wind_east_add_offset_attr_val {
-            netcdf::AttributeValue::Double(v) => v as f32,
-            _ => panic!("scale_factor was not a Double"),
-        };
-        println!("Add offset for wind_east: {:?}", wind_east_add_offset);
+        // let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
+        // let wind_east_scale_factor = match wind_east_scale_factor_attr_val {
+        //     netcdf::AttributeValue::Double(v) => v as f32,
+        //     _ => panic!("scale_factor was not a Double"),
+        // };
+        // println!("Scale factor for wind_east: {:?}", wind_east_scale_factor);
+        
+        // let wind_east_add_offset_attr_val = wind_east.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
+        // let wind_east_add_offset = match wind_east_add_offset_attr_val {
+        //     netcdf::AttributeValue::Double(v) => v as f32,
+        //     _ => panic!("scale_factor was not a Double"),
+        // };
+        // println!("Add offset for wind_east: {:?}", wind_east_add_offset);
 
         // let wind_east_fill_value_attr_val = wind_east.attribute("fill_value").expect("No fill value found").value().expect("Could not get fill value");
         // let wind_east_fill_value = match wind_east_fill_value_attr_val {
