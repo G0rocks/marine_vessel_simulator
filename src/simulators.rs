@@ -58,17 +58,14 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
 
-    println!("Cheeseburger!");
-
-    println!("Atty::is(atty::steam: {} ", atty::is(atty::Stream::Stdout));
-
     // Init progress bar with ETA and elapsed time
     let num_sims = simulation.start_times.len();
     let bar = indicatif::ProgressBar::new(num_sims as u64);
     // Set progress bar style
     bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
     // If terminal is interactive, use live redraw, otherwise use static redraw
-    if atty::is(atty::Stream::Stdout) {
+    let is_interactive_terminal = atty::is(atty::Stream::Stdout);
+    if is_interactive_terminal {
         // Normal terminal behavior (live redraw)
         bar.set_draw_target(indicatif::ProgressDrawTarget::stdout());
         bar.enable_steady_tick(std::time::Duration::from_millis(500));
@@ -103,6 +100,10 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         }
         // Update progress bar
         bar.inc(1);
+        // If not interactive terminal, print progressbar manually
+        if !is_interactive_terminal {
+            println!("{:?}", bar);
+        }
     }
     // Finish progress bar
     bar.finish();
