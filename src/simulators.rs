@@ -75,16 +75,6 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     }
     bar.inc(0);
 
-
-
-
-
-
-
-
-
-
-
     
     // Runs sim_waypoint_mission for each start time in start_times
     for (i, start_time) in simulation.start_times.iter().enumerate() {
@@ -100,6 +90,7 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         }
         // Update progress bar
         bar.inc(1);
+        println!("I did a thing!");
         // If not interactive terminal, print progressbar manually
         println!("Is interactive with = false: {}", !is_interactive_terminal);
         if is_interactive_terminal == false {

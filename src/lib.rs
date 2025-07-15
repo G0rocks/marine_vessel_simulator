@@ -74,9 +74,6 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
         time::Duration, time::Duration,
         uom::si::f64::Length, uom::si::f64::Length, u64) {
 
-    // Print current directory
-    println!("evalute_cargo_shipping_logs Current directory: {}", std::env::current_dir().unwrap().display());
-
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
