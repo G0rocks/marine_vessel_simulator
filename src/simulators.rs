@@ -58,23 +58,23 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
 
+    println!("Atty::is(atty::steam: {} ", atty::is(atty::Stream::Stdout));
+
     // Init progress bar with ETA and elapsed time
     let num_sims = simulation.start_times.len();
     let bar = indicatif::ProgressBar::new(num_sims as u64);
-    // Set progress bar
+    // Set progress bar style
+    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
     // If terminal is interactive, use live redraw, otherwise use static redraw
     if atty::is(atty::Stream::Stdout) {
         // Normal terminal behavior (live redraw)
         bar.set_draw_target(indicatif::ProgressDrawTarget::stdout());
+        bar.enable_steady_tick(std::time::Duration::from_millis(500));
     } else {
         // Force static redraw every step to stdout (or to log)
         bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
     }
-    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
-    bar.enable_steady_tick(std::time::Duration::from_millis(500));
     bar.inc(0);
-
-
 
 
 
