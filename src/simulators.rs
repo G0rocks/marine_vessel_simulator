@@ -71,7 +71,7 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         bar.enable_steady_tick(std::time::Duration::from_millis(500));
     } else {
         // Force static redraw every step to stdout (or to log)
-        bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
+        // bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
     }
     bar.inc(0);
 
@@ -90,11 +90,9 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
         }
         // Update progress bar
         bar.inc(1);
-        println!("I did a thing!");
         // If not interactive terminal, print progressbar manually
-        println!("Is interactive with = false: {}", !is_interactive_terminal);
         if is_interactive_terminal == false {
-            println!("Elapsed: {} seconds, Steps {}/{}, ETA: {:?}", bar.elapsed().as_secs(), bar.position(), num_sims, bar.eta().as_secs());
+            println!("Elapsed: {} secs, Steps {}/{}, ETA: {} secs left", bar.elapsed().as_secs(), bar.position(), num_sims, bar.eta().as_secs());
         }
     }
     // Finish progress bar
