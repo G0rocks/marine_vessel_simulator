@@ -17,6 +17,7 @@ use copernicusmarine_rs;    // To get weather data
 use time;   // To do time calculations
 use time::UtcDateTime;  // To use UtcDateTime
 use indicatif;   // For progress bar
+use atty;       // To check if terminal is interactive or not
 
 
 // Internal modules
