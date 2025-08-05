@@ -507,7 +507,7 @@ pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     let day_of_month: u8 = working_str[8..10].parse::<u8>().expect("Invalid day");
     let date = time::Date::from_calendar_date(year, month, day_of_month).expect("Could not create time::Date from values");
 
-    let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}", &working_str[11..13]).as_str());
+    let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}\nInput string: {}", &working_str[11..13], working_str).as_str());
     let minutes: u8 = working_str[14..16].parse::<u8>().expect("Invalid minute");
     // let seconds: u8 = working_str[17..19].parse::<u8>().expect("Invalid second");
     let time_hms = time::Time::from_hms(hour, minutes, 0).expect("Could not create time::Time from values");
