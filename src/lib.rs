@@ -507,7 +507,7 @@ pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     let day_of_month: u8 = working_str[8..10].parse::<u8>().expect("Invalid day");
     let date = time::Date::from_calendar_date(year, month, day_of_month).expect("Could not create time::Date from values");
 
-    let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}\nInput string: {}", &working_str[11..13], working_str).as_str());
+    let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}\nInput string: {}\nError\n", &working_str[11..13], working_str).as_str());
     let minutes: u8 = working_str[14..16].parse::<u8>().expect("Invalid minute");
     // let seconds: u8 = working_str[17..19].parse::<u8>().expect("Invalid second");
     let time_hms = time::Time::from_hms(hour, minutes, 0).expect("Could not create time::Time from values");
@@ -520,6 +520,7 @@ pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
 }
 
 /// Converts a time_stamp to a string in the format YYYY-MM-DD hh:mm
+/// Is this function never called?
 pub fn timestamp_to_string(time_stamp: uom::si::f64::Time) -> String {
     // Get the year and day from the time_stamp
     let year: i32 = time_stamp.get::<uom::si::time::year>() as i32;
@@ -961,8 +962,35 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
 
     // Write the ship log entries
     for entry in boat.ship_log.iter() {
+        let mut _timestamp_string: String = String::new();  //Underscored to avoid unused variable warning since it is used in wtr.write_record
+        _timestamp_string.push_str(entry.timestamp.year().to_string().as_str());
+        _timestamp_string.push_str("-");
+        // If month is 1 digit, add a leading zero
+        if (entry.timestamp.month() as i16) < 10 {
+            _timestamp_string.push_str("0");
+        }
+        _timestamp_string.push_str((entry.timestamp.month() as i8).to_string().as_str());
+        _timestamp_string.push_str("-");
+        // If day is 1 digit, add a leading zero
+        if entry.timestamp.day() < 10 {
+            _timestamp_string.push_str("0");
+        }
+        _timestamp_string.push_str(entry.timestamp.day().to_string().as_str());
+        _timestamp_string.push_str(" ");
+        // If hour is 1 digit, add a leading zero
+        if entry.timestamp.hour() < 10 {
+            _timestamp_string.push_str("0");
+        }
+        _timestamp_string.push_str(entry.timestamp.hour().to_string().as_str());
+        _timestamp_string.push_str(":");
+        // If minute is 1 digit, add a leading zero
+        if entry.timestamp.minute() < 10 {
+            _timestamp_string.push_str("0");
+        }
+        _timestamp_string.push_str(entry.timestamp.minute().to_string().as_str());
+
         wtr.write_record(&[
-            entry.timestamp.to_string(), // timestamp_to_string(entry.timestamp),
+            _timestamp_string, //entry.timestamp.to_string(), // timestamp_to_string(entry.timestamp),
             format!("{},{}", entry.coordinates_initial.y(), entry.coordinates_initial.x()),
             format!("{},{}", entry.coordinates_current.y(), entry.coordinates_current.x()),
             format!("{},{}", entry.coordinates_final.y(), entry.coordinates_final.x()),
