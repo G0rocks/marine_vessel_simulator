@@ -65,9 +65,12 @@ impl Wind {
 /// Coordinates are expected to be in the format of ISO 6709 using decimal places with a comma between latitude and longitude. "latitude,longitude" (e.g., "52.5200,13.4050") 
 /// The first current coordinate must match the initial coordinate and the last current coordinate must match the final coordinate.
 /// # Example:
+/// ```
 /// let filename: &str = "../data/mydata.csv";
-/// let distance: u64 = 8000; // Distance in km
+/// // Distance in km
+/// let distance: u64 = 8000;
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
+/// ```
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     (uom::si::f64::Velocity, uom::si::f64::Velocity,
         Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>,
@@ -486,7 +489,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 /// Converts a string into an uom::si::f64::Time object
 /// time_string: The string to convert in the format YYYY-MM-DD hh:mm
 /// # Example:
-/// let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");
+/// `let my_timestamp: uom::si::f64::Time = str_to_coordinate("52.5200,13.4050");`
 pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     // Remove all whitespaces in string
     let mut working_str: &str = (&time_string[..]).trim();
@@ -636,7 +639,7 @@ pub fn month_from_day(day_of_year: u16, year: i32) -> (u8, u16) {
 /// Converts a string into a geo::Point object
 /// point_string: The string to convert
 /// # Example:
-/// let my_coord: geo::Point = string_to_point("52.5200,13.4050");
+/// `let my_coord: geo::Point = string_to_point("52.5200,13.4050");`
 /// Note that the output is a geo::Point::new(longitude, latitude) but the input string must be in the format of latitude,longitude so the order is reversed
 pub fn string_to_point(coord_string: String) -> geo::Point {
     // Remove all spaces in string
@@ -699,7 +702,7 @@ pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) ->
 /// Converts a string into a uom::si::f64::Mass object
 /// cargo_string: The string to convert, must be in metric tons (1 metric ton = 1000 kg)
 /// # Example:
-/// let my_tons: uom::si::f64::Mass = string_to_tons("500.3");
+/// `let my_tons: uom::si::f64::Mass = string_to_tons("500.3");`
 pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
     // Remove all spaces in string
     let cargo_str: &str = (&cargo_string[..]).trim();
@@ -721,7 +724,7 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
 /// Returns the average and standard deviation of a vector of uom::si::f64::Velocity objects
 /// speed_vec: The vector of uom::si::f64::Velocity objects
 /// # Example:
-/// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
+/// `let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);`
 pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
     Result<(uom::si::f64::Velocity, uom::si::f64::Velocity), io::Error> {
     // Validate that the speed_vec has at least 1 value
@@ -759,7 +762,7 @@ pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
 /// Returns the average and standard deviation of a vector of Option<uom::si::f64::Mass> objects
 /// cargo_vec: The vector of Option<uom::si::f64::Mass> objects
 /// # Example:
-/// let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);
+/// `let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);`
 pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
     Result<(Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>), io::Error> {
     // Validate that the vector has at least 1 value
@@ -813,7 +816,7 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
 
 /// Returns the average and standard deviation of a vector
 /// # Example:
-/// let (my_mean, my_std) = get_time_mean_and_std(&my_vec);
+/// `let (my_mean, my_std) = get_time_mean_and_std(&my_vec);`
 pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
     Result<(time::Duration, time::Duration), io::Error> {
     // Validate that the vector has at least 1 value
@@ -853,7 +856,7 @@ pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
 /// Returns the average and standard deviation of a vector of uom::si::f64::Length objects
 /// dist_vec: The vector of uom::si::f64::Length objects
 /// # Example:
-/// let (my_mean, my_std) = get_dist_mean_and_std(&my_vec);
+/// `let (my_mean, my_std) = get_dist_mean_and_std(&my_vec);`
 pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> Result<(uom::si::f64::Length, uom::si::f64::Length), io::Error> {
     // Validate that the vector has at least 1 value
     if dist_vec.is_empty() {
@@ -894,7 +897,7 @@ pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> Result
 /// The delimiter is a semicolon.
 /// file_path: Path to the CSV file
 /// # Example:
-/// let file_path: &str = "my_route_plan.csv";
+/// `let file_path: &str = "my_route_plan.csv";`
 pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
