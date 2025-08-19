@@ -81,6 +81,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)
+        .flexible(true)
         .from_path(file_path)
         .expect("Failed to open the file");
 
@@ -173,8 +174,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 }
             }
             // Handle the error if the log_entry cannot be read
-            Err(err) => {
-                eprintln!("Error reading log_entry: {}", err);
+            Err(ref err) => {
+                eprintln!("Error reading log_entry: {:?}\nError: {}", result, err);
             }
         }
     }
