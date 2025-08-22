@@ -7,6 +7,9 @@ use crate::*;   // To use everything from the crate
 // Structs and Enums
 //----------------------------------------------------
 /// Struct to hold sailing leg data
+/// p1: Start point of the leg
+/// p2: End point of the leg
+/// tacking_width: Width of the tacking zone around the leg line. The boat will try to stay within this zone when sailing the leg. The width will have the line between p1 and p2 in the middle of the tacking zone.
 #[derive(Debug, Copy, Clone)]
 pub struct SailingLeg {
     pub p1: geo::Point,
