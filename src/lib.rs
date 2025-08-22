@@ -427,13 +427,29 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     let mut y_vec_starboard: Vec<f64> = Vec::new();
 
     // Todo: Add tacking boundary
-    for leg in &route_plan {
+    for (i, leg) in route_plan.iter().enumerate() {
+        // If tacking width changes between legs, we should first plot the previous width at the current location before plotting the new width
+        if i > 0 && leg.tacking_width != route_plan[i-1].tacking_width {
+            // Get last_leg
+            let last_leg = &route_plan[i-1];
+            // Get last tacking width
+            let last_tacking_width = last_leg.tacking_width;
+            // Get point half a tacking width to the left and right of the leg
+            let bearing = Haversine.bearing(last_leg.p1, last_leg.p2);
+            // Get the left and right points but at the location of the current leg
+            let port_point = Haversine.destination(leg.p1, bearing - 90.0, last_tacking_width.get::<uom::si::length::meter>() / 2.0);
+            let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, last_tacking_width.get::<uom::si::length::meter>() / 2.0);
+
+            x_vec_port.push(port_point.y());
+            y_vec_port.push(port_point.x());
+            x_vec_starboard.push(starboard_point.y());
+            y_vec_starboard.push(starboard_point.x());
+        }
+
         // Get point half a tacking width to the left and right of the leg
         let bearing = Haversine.bearing(leg.p1, leg.p2);
-        // println!("Bearing: {:?}", bearing - 90.0);
         // Get the left and right points
         let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
-        //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
         let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
 
         x_vec_port.push(port_point.y());
