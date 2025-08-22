@@ -466,9 +466,11 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Todo: Add number of tacks?
 
     // Loop through each time step
-    for i in 0..simulation.max_iterations {
+    let mut iterations: usize = 0;
+    while iterations <= simulation.max_iterations {
+        iterations += 1;
+        println!("Iteration: {}", iterations);
         // Simulate the boat moving towards the next waypoint
-        // Pick time_step to work with
         let working_time_step = match temp_time_step {
             // If temp_time_step is set, use it
             Some(t) => t,
@@ -477,6 +479,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         };
         // Reset temp_time_step
         temp_time_step = None;
+
+        println!("Working time step: {}", working_time_step);
 
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
@@ -654,87 +658,84 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         
         
 
-        // While still have some distance left to travel during time step
-        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
-            // Get next waypoint
-            next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+        // Print for debugging
+        // Print waypoint number, course to next waypoint, wind angle and boat heading
+        println!("Time: {}. Heading to waypoint {}. Bearing: {:.1}°, Wind angle: {:.1}°, Heading: {:.1}°", boat_time_now, boat.current_leg.unwrap(), bearing_to_next_waypoint, wind.angle, boat.heading.unwrap());
 
-            // Get distance to next waypoint from current location
-            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
 
-            // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
-            if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
-                // Move to next waypoint
-                boat.location = Some(next_waypoint);
+        // Get next waypoint
+        next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
 
-                // Add ship log entry at new location
-                let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    // Set timestamp to last shiplogentry + time step
-                    timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                    coordinates_initial: coordinates_initial,
-                    coordinates_current: boat.location.unwrap(),
-                    coordinates_final: coordinates_final,
-                    cargo_on_board: boat.cargo_current,
+        // Get distance to next waypoint from current location
+        let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+
+        // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
+        if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
+            // Move to next waypoint
+            boat.location = Some(next_waypoint);
+
+            // Set temp_time_step to time left in simulation time_step after moving to (now current) waypoint
+            let time_passed = dist_to_next_waypoint.get::<uom::si::length::meter>() / working_velocity.get::<uom::si::velocity::meter_per_second>();
+            temp_time_step = Some(working_time_step - time_passed);
+
+            // Add ship log entry at new location
+            let new_log_entry: ShipLogEntry = ShipLogEntry {
+                // Set timestamp to last shiplogentry + time step
+                timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(time_passed)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
+                coordinates_initial: coordinates_initial,
+                coordinates_current: boat.location.unwrap(),
+                coordinates_final: coordinates_final,
+                cargo_on_board: boat.cargo_current,
+            };
+
+            // Push the new log entry to the ship log
+            boat.ship_log.push(new_log_entry);
+
+            // If the boat has reached the last waypoint, stop the simulation
+            if boat.location.unwrap() == coordinates_final {
+
+                // Stop the simulation
+                return Ok("Simulation completed".to_string());
+            }
+
+            println!("Time passed: {} seconds", time_passed,);
+
+            // Update current leg number
+            boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+        }
+        // Otherwise, move boat forwards along heading and log to ship_log
+        else {
+            // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
+            new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+            // If new location is further away from leg line than half of tacking width, tack before moving
+            let min_dist_to_leg_line = min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, new_location);
+
+            if tacking_width <  min_dist_to_leg_line {
+                boat.tack(wind.angle);
+                // print debug message current distance to leg line
+                // Boat should save ship log entry at tack location and go to next iteration of while loop
+                println!("Tacking! New heading: {:.1}°", boat.heading.unwrap());
+                // println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
+                // println!("Min dist from new loacation to leg line: {:.1} km", min_dist_to_leg_line.get::<uom::si::length::kilometer>());
+                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+            }
+
+
+            // Update the location of the boat
+            boat.location = Some(new_location);
+
+            // Log the new location to the ship log
+            let new_log_entry: ShipLogEntry = ShipLogEntry {
+                timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(working_time_step)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
+                coordinates_initial: coordinates_initial,
+                coordinates_current: boat.location.unwrap(),
+                coordinates_final: coordinates_final,
+                cargo_on_board: boat.cargo_current,
                 };
 
-                // Push the new log entry to the ship log
-                boat.ship_log.push(new_log_entry);
-
-                // If the boat has reached the last waypoint, stop the simulation
-                if boat.location.unwrap() == coordinates_final {
-
-                    // Stop the simulation
-                    return Ok("Simulation completed".to_string());
-                }
-
-                // Set temp_time_step to time left in simulation time_step after moving to (now current) waypoint
-                temp_time_step = Some((travel_dist - dist_to_next_waypoint).get::<uom::si::length::meter>() / working_velocity.get::<uom::si::velocity::meter_per_second>());
-
-                // Update current leg number
-                boat.current_leg = Some(boat.current_leg.unwrap() + 1);
-
-                // Reduce travel distance by distance to next waypoint
-                //travel_dist = travel_dist - dist_to_next_waypoint;
-                // Reduce travel distance to zero in order to continue with the next while loop iteration
-                travel_dist -= travel_dist;
-            }
-            // Otherwise, move boat forwards along heading and log to ship_log
-            else {
-                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
-                // If new location is further away from leg line than half of tacking width, tack before moving
-                let min_dist_to_leg_line = min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, new_location);
-
-                if tacking_width <  min_dist_to_leg_line {
-                    boat.tack(wind.angle);
-                    // print debug message current distance to leg line
-                    // println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
-                    // println!("Min dist from new loacation to leg line: {:.1} km", min_dist_to_leg_line.get::<uom::si::length::kilometer>());
-                    new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
-                }
-
-
-                // Update the location of the boat
-                boat.location = Some(new_location);
-
-                // Log the new location to the ship log
-                let new_log_entry: ShipLogEntry = ShipLogEntry {
-                    timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply time::Duration with value")).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                    // timestamp: start_time + ((i + 1) as f64)*time_step,
-                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
-                    coordinates_initial: coordinates_initial,
-                    coordinates_current: boat.location.unwrap(),
-                    coordinates_final: coordinates_final,
-                    cargo_on_board: boat.cargo_current,
-                    };
-
-                // Push the new log entry to the ship log
-                boat.ship_log.push(new_log_entry);
-
-                // Set travel distance to zero for next loop
-                travel_dist = travel_dist - travel_dist;
-            }
-        } // End while loop
+            // Push the new log entry to the ship log
+            boat.ship_log.push(new_log_entry);
+        }
     } // End for loop
 
     // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
