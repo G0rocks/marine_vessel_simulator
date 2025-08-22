@@ -148,6 +148,11 @@ impl Boat {
     pub fn tack(&mut self, wind_angle: f64) {
         // Switch preferred wind side
         self.wind_preferred_side.switch();
+        self.hold_tack(wind_angle);
+    }
+
+    /// Keeps the heading of the boat based on the preferred wind side from the last tack.
+    pub fn hold_tack(&mut self, wind_angle: f64) {
         // Set heading to the minimum angle of attack with respect to the wind angle 
         if self.wind_preferred_side == VesselSide::Port {
             // Wind on port side
