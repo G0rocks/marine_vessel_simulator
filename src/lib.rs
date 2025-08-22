@@ -327,7 +327,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 
 
 /// Visualize ship logs with plotly on map
-pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, _figure_file_path: &str) -> Result<(), io::Error> {
+/// figure_file_path: Option<&str> - Path to the file where the figure will be saved. If None, the figure will not be saved to a file.
+pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, figure_file_path: Option<&str>) -> Result<(), io::Error> {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
@@ -476,7 +477,10 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     // Open plot
     figure.show();
 
-    // Save the figure to a file
+    // Save the figure to a file if file path is provided
+    if let Some(file_path) = figure_file_path {
+        figure.write_html(file_path);
+    }
     // figure.write_html("my_fig_plotly_test");
 
     // Return Ok if all went well
