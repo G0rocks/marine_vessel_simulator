@@ -996,6 +996,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
             _timestamp_string.push_str("0");
         }
         _timestamp_string.push_str(entry.timestamp.minute().to_string().as_str());
+        _timestamp_string.push_str(":");
         // If second is 1 digit, add a leading zero
         if entry.timestamp.second() < 10 {
             _timestamp_string.push_str("0");
