@@ -469,7 +469,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     let mut iterations: usize = 0;
     while iterations <= simulation.max_iterations {
         iterations += 1;
-        println!("Iteration: {}", iterations);
         // Simulate the boat moving towards the next waypoint
         let working_time_step = match temp_time_step {
             // If temp_time_step is set, use it
@@ -479,8 +478,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         };
         // Reset temp_time_step
         temp_time_step = None;
-
-        println!("Working time step: {}", working_time_step);
 
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
@@ -654,14 +651,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
 
         // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(working_time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
-        
-        
-
-        // Print for debugging
-        // Print waypoint number, course to next waypoint, wind angle and boat heading
-        println!("Time: {}. Heading to waypoint {}. Bearing: {:.1}°, Wind angle: {:.1}°, Heading: {:.1}°", boat_time_now, boat.current_leg.unwrap(), bearing_to_next_waypoint, wind.angle, boat.heading.unwrap());
-
+        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(working_time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times        
 
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
@@ -698,8 +688,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 return Ok("Simulation completed".to_string());
             }
 
-            println!("Time passed: {} seconds", time_passed,);
-
             // Update current leg number
             boat.current_leg = Some(boat.current_leg.unwrap() + 1);
         }
@@ -714,7 +702,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 boat.tack(wind.angle);
                 // print debug message current distance to leg line
                 // Boat should save ship log entry at tack location and go to next iteration of while loop
-                println!("Tacking! New heading: {:.1}°", boat.heading.unwrap());
+                // println!("Tacking! New heading: {:.1}°", boat.heading.unwrap());
                 // println!("Current distance to leg line: {:.1} km", min_haversine_distance(boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
                 // println!("Min dist from new loacation to leg line: {:.1} km", min_dist_to_leg_line.get::<uom::si::length::kilometer>());
                 new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
