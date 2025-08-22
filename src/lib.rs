@@ -982,7 +982,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
         .from_path(csv_file_path)?;
 
     // Write the header
-    wtr.write_record(&["timestamp", "coordinates_initial", "coordinates_current", "coordinates_final", "cargo_on_board"])?;
+    wtr.write_record(&["timestamp", "coordinates_initial", "coordinates_current", "coordinates_final", "cargo_on_board[ton]", "velocity[m/s]", "course[°]", "heading", "true_bearing[°]", "draught[m]", "navigation_status"])?;
 
     // Write the ship log entries
     for entry in boat.ship_log.iter() {
@@ -1019,12 +1019,55 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
         }
         _timestamp_string.push_str(entry.timestamp.second().to_string().as_str());
 
+        // If velocity is None, set to empty string
+        let velocity = match entry.velocity {
+            Some(v) => v.get::<uom::si::velocity::meter_per_second>().to_string(),
+            None => String::from(""),
+        };
+
+        // If course is None, set to empty string
+        let course = match entry.course {
+            Some(c) => c.to_string(),
+            None => String::from(""),
+        };
+
+        // If heading is None, set to empty string
+        let heading = match entry.heading {
+            Some(h) => h.to_string(),
+            None => String::from(""),
+        };
+
+        // If true_bearing is None, set to empty string
+        let true_bearing = match entry.true_bearing {
+            Some(tb) => tb.to_string(),
+            None => String::from(""),
+        };
+
+        // If draught is None, set to empty string
+        let draught = match entry.draught {
+            Some(d) => d.get::<uom::si::length::meter>().to_string(),
+            None => String::from(""),
+        };
+
+        // If navigation_status is None, set to empty string
+        let navigation_status = match &entry.navigation_status {
+            Some(ns) => (*ns as u64).to_string(),
+            None => String::from(""),
+        };
+
+        // Write the record
         wtr.write_record(&[
             _timestamp_string, //entry.timestamp.to_string(), // timestamp_to_string(entry.timestamp),
             format!("{},{}", entry.coordinates_initial.y(), entry.coordinates_initial.x()),
             format!("{},{}", entry.coordinates_current.y(), entry.coordinates_current.x()),
             format!("{},{}", entry.coordinates_final.y(), entry.coordinates_final.x()),
-            entry.cargo_on_board.get::<uom::si::mass::ton>().to_string(),
+            entry.cargo_on_board.unwrap().get::<uom::si::mass::ton>().to_string(),
+            velocity,
+            course,
+            heading,
+            true_bearing,
+            draught,
+            navigation_status,
         ])?;
     }
 

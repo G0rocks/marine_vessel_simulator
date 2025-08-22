@@ -18,13 +18,36 @@ pub struct SailingLeg {
 }
 
 /// Struct to hold ship long entry
+/// For every ship log you must know the time, where you started, where you are now and where you are going
+/// Other fields are optional, but potentially useful for analysis later
 #[derive(Debug)]
 pub struct ShipLogEntry {
     pub timestamp: time::UtcDateTime,
     pub coordinates_initial: geo::Point,
     pub coordinates_current: geo::Point,
     pub coordinates_final: geo::Point,
-    pub cargo_on_board: uom::si::f64::Mass,
+    pub cargo_on_board: Option<uom::si::f64::Mass>,
+    pub velocity: Option<uom::si::f64::Velocity>,  // Current velocity of the boat
+    pub course: Option<f64>,  // Course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub heading: Option<f64>,  // Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub true_bearing: Option<f64>,  // True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub draught: Option<uom::si::f64::Length>,  // Draught of the boat at the time of the log entry
+    pub navigation_status: Option<NavigationStatus>,  // Navigation status of the boat at the time of the log entry
+}
+/// Navigational status of the vessel based on the AIS navigation status codes
+/// See: https://support.marinetraffic.com/en/articles/9552867-what-is-the-significance-of-the-ais-navigational-status-values
+#[derive(Debug, Copy, Clone)]
+#[repr(u64)]
+    pub enum NavigationStatus {
+    UnderwayUsingEngine         = 0,
+    AtAnchor                    = 1,
+    NotUnderCommand             = 2,
+    RestrictedManeuverability   = 3,
+    ConstrainedByDraught        = 4,
+    Moored                      = 5,
+    Aground                     = 6,
+    EngagedInFishing            = 7,
+    UnderwaySailing             = 8,
 }
 
 /// Struct to represent a sail
