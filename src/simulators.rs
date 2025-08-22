@@ -35,10 +35,19 @@ pub struct Simulation {
     pub weather_data_file: Option<String>, // Weather data file for the simulation
     /// Copernicus information
     pub copernicus: Option<copernicusmarine_rs::Copernicus>,
+    /// Progress bar, set to none if not needed, if you use, set the length to the total number of legs in all simulations
+    pub progress_bar: Option<indicatif::ProgressBar>,
 }
 
 impl Simulation {
     /// Creates a new simulation with the given parameters
+    /// # Example - Adding a progress bar
+    /// // Init progress bar for simulation
+    /// let mut progress_bar = indicatif::ProgressBar::new((num_simulations*100) as u64);
+    /// // Set progress bar style
+    /// progress_bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
+    /// // Add progress bar to simulation
+    /// my_sim.progress_bar = Some(progress_bar); // Set the progress bar for the simulation
     pub fn new(simulation_method: SimMethod, start_times: Vec<UtcDateTime>, time_step: time::Duration, max_iterations: usize, weather_data_file: Option<String>, copernicus: Option<copernicusmarine_rs::Copernicus>) -> Self {
         Simulation {
             simulation_method,
@@ -46,7 +55,8 @@ impl Simulation {
             time_step,
             max_iterations,
             weather_data_file,
-            copernicus
+            copernicus,
+            progress_bar: None
         }
     }
 }
@@ -58,25 +68,23 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
     // Init sim_msg:
     let mut sim_msg_vec: Vec<String> = Vec::new();
 
-    // Init progress bar with ETA and elapsed time
-    let num_sims = simulation.start_times.len();
-    let bar = indicatif::ProgressBar::new(num_sims as u64);
-    // Set progress bar style
-    bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
-    // If terminal is interactive, use live redraw, otherwise use static redraw
+    // Check for interactive terminal for progress bar
     let is_interactive_terminal = atty::is(atty::Stream::Stdout);
-    if is_interactive_terminal {
-        // Normal terminal behavior (live redraw)
-        bar.set_draw_target(indicatif::ProgressDrawTarget::stdout());
-        bar.enable_steady_tick(std::time::Duration::from_millis(500));
-    } else {
-        // Force static redraw every step to stdout (or to log)
-        // bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
-        let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(bar.eta().as_secs() as i64, 0)); // What time the simulations will end
-        println!("Elapsed: {:?}, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", bar.elapsed(), bar.position(), num_sims, eta.year(), eta.month() as u8, eta.day(), eta.hour()+1, eta.minute(), eta.second());
+    // If simulation has progress bar, set it up and use it
+    if !(simulation.progress_bar.is_none()) {
+        // If terminal is interactive, use live redraw, otherwise use static redraw
+        if is_interactive_terminal {
+            // Normal terminal behavior (live redraw)
+            simulation.progress_bar.as_ref().unwrap().set_draw_target(indicatif::ProgressDrawTarget::stdout());
+            simulation.progress_bar.as_ref().unwrap().enable_steady_tick(std::time::Duration::from_millis(500));
+        } else {
+            // Force static redraw every step to stdout (or to log)
+            // bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
+            let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+            println!("Elapsed: {:?}, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour()+1, eta.minute(), eta.second());
+        }
+        simulation.progress_bar.as_ref().unwrap().inc(0);
     }
-    bar.inc(0);
-
     
     // Runs sim_waypoint_mission for each start time in start_times
     for (i, start_time) in simulation.start_times.iter().enumerate() {
@@ -90,16 +98,9 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
                 return Err(io::Error::new(io::ErrorKind::Other, format!("Error during simulation {}: {}", i.to_string(), e)));
             }
         }
-        // Update progress bar
-        bar.inc(1);
-        // If not interactive terminal, print progressbar manually
-        if is_interactive_terminal == false {
-            let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(bar.eta().as_secs() as i64, 0)); // What time the simulations will end
-            println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", bar.elapsed().as_secs(), bar.position(), num_sims, eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
-        }
     }
     // Finish progress bar
-    bar.finish();
+    simulation.progress_bar.as_ref().unwrap().finish();
 
     // Run successful, return Ok(sim_msg_vec)
     return Ok(sim_msg_vec);
@@ -107,7 +108,6 @@ pub fn sim_waypoint_missions(boat: &mut Boat, simulation: &Simulation) -> Result
 
 /// Function to simulate the boat following a waypoint mission
 /// Is basically a simulation handler that pipes the boat to the correct simulation function
-/// TODO: Add what to return, save csv file? Return travel time and more? Also improve documentation
 pub fn sim_waypoint_mission(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Check if the boat has a route plan, if no route plan
     if boat.route_plan.is_none() {
@@ -429,6 +429,10 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
     // }
 
+
+    // Check for interactive terminal for progress bar
+    let is_interactive_terminal = atty::is(atty::Stream::Stdout);
+
     // Set boats current location to the first waypoint
     boat.location = Some(boat.route_plan.as_ref().expect("Route plan missing?")[0].p1);
     // Set current leg to 1
@@ -690,6 +694,17 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
             // Update current leg number
             boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+            // Since leg number increased, update progress bar if a progress bar is in use
+            if !(simulation.progress_bar.is_none()) {
+            // If leg number increased, update progress bar
+            simulation.progress_bar.as_ref().unwrap().inc(1);
+            // If not interactive terminal, print progressbar manually
+            if is_interactive_terminal == false {
+                let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+            println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
+            }
+        }
+
         }
         // Otherwise, move boat forwards along heading and log to ship_log
         else {
