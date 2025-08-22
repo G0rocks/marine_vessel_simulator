@@ -462,11 +462,22 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     let mut next_waypoint: geo::Point;
     let mut bearing_to_next_waypoint: f64;
     let mut new_location: geo::Point;   // Init
+    let mut temp_time_step: Option<f64> = None; // Temporary time step, used if the time step is longer than needed to reach a waypoint in seconds
     // Todo: Add number of tacks?
 
     // Loop through each time step
     for i in 0..simulation.max_iterations {
         // Simulate the boat moving towards the next waypoint
+        // Pick time_step to work with
+        let working_time_step = match temp_time_step {
+            // If temp_time_step is set, use it
+            Some(t) => t,
+            // If no temp_time_step, use the simulation time step
+            None => simulation.time_step.as_seconds_f64(),
+        };
+        // Reset temp_time_step
+        temp_time_step = None;
+
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
         // Get tacking width from route plan
@@ -600,28 +611,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // If absolute relative wind angle is smaller than minimum angle of attack, then use tacking method
         if relative_wind_angle.abs() < boat.min_angle_of_attack.unwrap() {
-            // If wind is on port side, keep wind on port side and opposite for starboard side
-            // Set heading to the minimum angle of attack with respect to the wind angle 
-            if boat.wind_preferred_side == VesselSide::Port {
-                // Wind on port side
-                boat.heading = Some(wind.angle + boat.min_angle_of_attack.unwrap());
-            } else if boat.wind_preferred_side == VesselSide::Starboard {
-                // Wind on starboard side, keep on starboard side
-                boat.heading = Some(wind.angle - boat.min_angle_of_attack.unwrap());
-            }   // If boat has no preferred wind side set, catch and set to starboard
-            else {
-                boat.wind_preferred_side = VesselSide::Starboard; // Default to starboard since then we have the right of way in most cases
-                boat.heading = Some(wind.angle - boat.min_angle_of_attack.unwrap());
-            }
+            boat.hold_tack(wind.angle);
         } // Otherwise relative wind angle is bigger than minimum angle of attack, then go straight towards next waypoint
         else {
             // Set heading to the bearing to next waypoint
             boat.heading = Some(bearing_to_next_waypoint);
         }
-
-
-
-
 
         // Todo: use weather data to compute boats actual velocity
         // Find total force on boat
@@ -655,7 +650,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
 
         // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(simulation.time_step.whole_seconds() as f64); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(working_time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
         
         
 
@@ -672,29 +667,36 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 // Move to next waypoint
                 boat.location = Some(next_waypoint);
 
+                // Add ship log entry at new location
+                let new_log_entry: ShipLogEntry = ShipLogEntry {
+                    // Set timestamp to last shiplogentry + time step
+                    timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
+                    coordinates_initial: coordinates_initial,
+                    coordinates_current: boat.location.unwrap(),
+                    coordinates_final: coordinates_final,
+                    cargo_on_board: boat.cargo_current,
+                };
+
+                // Push the new log entry to the ship log
+                boat.ship_log.push(new_log_entry);
+
                 // If the boat has reached the last waypoint, stop the simulation
                 if boat.location.unwrap() == coordinates_final {
-                    // Update ship logs with last point
-                    let new_log_entry: ShipLogEntry = ShipLogEntry {
-                        // Set timestamp to last shiplogentry + time step
-                        timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                        coordinates_initial: coordinates_initial,
-                        coordinates_current: boat.location.unwrap(),
-                        coordinates_final: coordinates_final,
-                        cargo_on_board: boat.cargo_current,
-                    };
-
-                    // Push the new log entry to the ship log
-                    boat.ship_log.push(new_log_entry);
 
                     // Stop the simulation
                     return Ok("Simulation completed".to_string());
                 }
 
+                // Set temp_time_step to time left in simulation time_step after moving to (now current) waypoint
+                temp_time_step = Some((travel_dist - dist_to_next_waypoint).get::<uom::si::length::meter>() / working_velocity.get::<uom::si::velocity::meter_per_second>());
+
                 // Update current leg number
                 boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+
                 // Reduce travel distance by distance to next waypoint
-                travel_dist = travel_dist - dist_to_next_waypoint;
+                //travel_dist = travel_dist - dist_to_next_waypoint;
+                // Reduce travel distance to zero in order to continue with the next while loop iteration
+                travel_dist -= travel_dist;
             }
             // Otherwise, move boat forwards along heading and log to ship_log
             else {
