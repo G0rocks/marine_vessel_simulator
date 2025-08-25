@@ -359,9 +359,9 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 
     // Setup trace of ship logs
     let trace = plotly::ScatterGeo::new(y_vec, x_vec)
-                    .name("Ship logs").mode(plotly::common::Mode::Lines)
+                    .name("Ship logs")
+                    .mode(plotly::common::Mode::LinesMarkersText)
                     .show_legend(true);  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
-
 
     // Set layout as instructed by andrei-ng https://github.com/plotly/plotly.rs/pull/301
     let layout = plotly::Layout::new()

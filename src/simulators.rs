@@ -626,8 +626,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_east = wind_east*0.01;
         let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * 0.01;
-        // let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
-        let angle = 0.0;
+        let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
         
         // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
@@ -788,6 +787,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
 
                 println!("Travel_dist = {:.2} km", travel_dist.get::<uom::si::length::kilometer>());
+                println!("Wind angle = {:.2} °", wind.angle);
                 println!("Heading = {:.2} °", boat.heading.unwrap());
 
                 // Tack
