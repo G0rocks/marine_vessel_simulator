@@ -6,7 +6,8 @@
 /// Make another crate, sailplanner, that can make route plans for marine vessels.
 
 /// External crates
-use csv;    // CSV reader to read csv files
+use csv;    use geo::InterpolatePoint;
+// CSV reader to read csv files
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
@@ -707,8 +708,41 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 /// Get shortest distance between line and point
 /// The line is made up of the points p1 and p2
 /// Point p3 is the line that the shortest distance will be calculated from.
-/// The distance is calculated using an orthogonal projection of p3 onto the line p1-p2 and then calculating the haversine distance between p3 and the point of orthogonal projection
+/// The distance is calculated by
+/// 1. making 100 points on the haversine line between p1 and p2
+/// 2. calculating the haversine distance between p3 and all the points
+/// 3. picking the shortest distance between p3 and the points.
 pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
+    let my_dist = Haversine.distance(p1, p2)/100.0;
+    let my_points = Haversine.points_along_line(p1, p2, my_dist, true);
+
+    println!("p1: {:?}",p1);
+    println!("p2: {:?}",p2);
+    println!("p3: {:?}",p3);
+
+    let mut min_dist: f64 = std::f64::MAX;
+    let mut p_return: geo::Point = geo::Point::new(0.0, 0.0);
+
+    for point in my_points {
+        // If distance is shorter than min_dist, make that distance the new min_dist
+        let check_dist = Haversine.distance(point, p3);
+        if check_dist < min_dist {
+            min_dist = check_dist;
+            p_return = point;
+        }
+    }
+
+    println!("p_return: {:?}", p_return);
+
+    // Get and return the distance between the point and the line
+    return haversine_distance_uom_units(p3, p_return);
+}
+
+/// Get shortest distance between line and point
+/// The distance is calculated using an orthogonal projection of p3 onto the line p1-p2 and then calculating the haversine distance between p3 and the point of orthogonal projection
+/// The line is made up of the points p1 and p2
+/// Point p3 is the line that the shortest distance will be calculated from.
+pub fn min_orthogonal_projection_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
     // Find z in orthogonal projection of p3 onto the line p1-p2
     let u: geo::Point = p2 - p1; // Vector from p1 to p2
     let y: geo::Point = p3 - p1; // Vector from p1 to p3
