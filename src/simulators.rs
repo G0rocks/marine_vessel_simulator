@@ -194,7 +194,13 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
-        cargo_on_board: boat.cargo_current,
+        cargo_on_board: Some(boat.cargo_current),
+        velocity: boat.velocity_mean,
+        course: None,
+        heading: None,
+        true_bearing: None,
+        draught: None,
+        navigation_status: None,
     };
     // Push first ship log entry
     boat.ship_log.push(new_log_entry);
@@ -225,12 +231,16 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                     let new_log_entry: ShipLogEntry = ShipLogEntry {
                         // Set timestamp to last shiplogentry + time step
                         timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Couldn't add seconds, probably an overflow occured"),
-                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
-                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                         coordinates_initial: coordinates_initial,
                         coordinates_current: boat.location.unwrap(),
                         coordinates_final: coordinates_final,
-                        cargo_on_board: boat.cargo_current,
+                        cargo_on_board: Some(boat.cargo_current),
+                        velocity: boat.velocity_mean,
+                        course: None,
+                        heading: boat.heading,
+                        true_bearing: None,
+                        draught: None,
+                        navigation_status: None,
                     };
 
                     // Push the new log entry to the ship log
@@ -259,12 +269,16 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                 // Log the new location to the ship log
                 let new_log_entry: ShipLogEntry = ShipLogEntry {
                     timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply, an overflow error probably occurred")).expect("Could not add timestep, an overflow probably occurred"),
-                    // timestamp: start_time + ((i + 1) as f64)*time_step,
-                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                     coordinates_initial: coordinates_initial,
                     coordinates_current: boat.location.unwrap(),
                     coordinates_final: coordinates_final,
-                    cargo_on_board: boat.cargo_current,
+                    cargo_on_board: Some(boat.cargo_current),
+                    velocity: boat.velocity_mean,
+                    course: None,
+                    heading: boat.heading,
+                    true_bearing: None,
+                    draught: None,
+                    navigation_status: None,
                     };
 
                 // Push the new log entry to the ship log
@@ -311,7 +325,13 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
-        cargo_on_board: boat.cargo_current,
+        cargo_on_board: Some(boat.cargo_current),
+        velocity: None,
+        course: None,
+        heading: None,
+        true_bearing: None,
+        draught: None,
+        navigation_status: None,
     };
     // Push first ship log entry
     boat.ship_log.push(new_log_entry);
@@ -345,12 +365,16 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                     let new_log_entry: ShipLogEntry = ShipLogEntry {
                         // Set timestamp to last shiplogentry + time step
                         timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(simulation.time_step).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow happened?"),
-                        // timestamp: boat.ship_log.last().unwrap().timestamp.add_days(time_step),
-                        //timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                         coordinates_initial: coordinates_initial,
                         coordinates_current: boat.location.unwrap(),
                         coordinates_final: coordinates_final,
-                        cargo_on_board: boat.cargo_current,
+                        cargo_on_board: Some(boat.cargo_current),
+                        velocity: Some(working_velocity),
+                        course: None,
+                        heading: boat.heading,
+                        true_bearing: None,
+                        draught: None,
+                        navigation_status: None,
                     };
 
                     // Push the new log entry to the ship log
@@ -379,12 +403,16 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                 // Log the new location to the ship log
                 let new_log_entry: ShipLogEntry = ShipLogEntry {
                     timestamp: start_time.checked_add(simulation.time_step.checked_mul((i + 1) as i32).expect("Could not multiply time::Duration with value. Maybe an overflow occurred?")).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                    // timestamp: start_time + ((i + 1) as f64)*time_step,
-                    // timestamp: start_time + uom::si::f64::Time::new::<uom::si::time::second>(((i + 1) as f64)*time_step.get::<uom::si::time::second>()),
                     coordinates_initial: coordinates_initial,
                     coordinates_current: boat.location.unwrap(),
                     coordinates_final: coordinates_final,
-                    cargo_on_board: boat.cargo_current,
+                    cargo_on_board: Some(boat.cargo_current),
+                    velocity: Some(working_velocity),
+                    course: None,
+                    heading: boat.heading,
+                    true_bearing: None,
+                    draught: None,
+                    navigation_status: None,
                     };
 
                 // Push the new log entry to the ship log
@@ -455,7 +483,13 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
-        cargo_on_board: boat.cargo_current,
+        cargo_on_board: Some(boat.cargo_current),
+        velocity: Some(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0)), // Start at 0 m/s
+        course: None,
+        heading: None,  // Note perhaps we can change this to be better, in the future
+        true_bearing: None,
+        draught: None,
+        navigation_status: Some(NavigationStatus::UnderwaySailing),
     };
     // Push first ship log entry
     boat.ship_log.push(new_log_entry);
@@ -679,7 +713,13 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 coordinates_initial: coordinates_initial,
                 coordinates_current: boat.location.unwrap(),
                 coordinates_final: coordinates_final,
-                cargo_on_board: boat.cargo_current,
+                cargo_on_board: Some(boat.cargo_current),
+                velocity: Some(working_velocity),
+                course: None,
+                heading: boat.heading,
+                true_bearing: None,
+                draught: None,
+                navigation_status: Some(NavigationStatus::UnderwaySailing),
             };
 
             // Push the new log entry to the ship log
@@ -733,7 +773,13 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 coordinates_initial: coordinates_initial,
                 coordinates_current: boat.location.unwrap(),
                 coordinates_final: coordinates_final,
-                cargo_on_board: boat.cargo_current,
+                cargo_on_board: Some(boat.cargo_current),
+                velocity: Some(working_velocity),
+                course: None,
+                heading: boat.heading,
+                true_bearing: None,
+                draught: None,
+                navigation_status: Some(NavigationStatus::UnderwaySailing),
                 };
 
             // Push the new log entry to the ship log
