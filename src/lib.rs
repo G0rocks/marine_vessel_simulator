@@ -706,36 +706,69 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 }
 
 /// Get shortest distance between line and point
-/// The line is made up of the points p1 and p2
-/// Point p3 is the line that the shortest distance will be calculated from.
-/// The distance is calculated by
-/// 1. making 100 points on the haversine line between p1 and p2
-/// 2. calculating the haversine distance between p3 and all the points
-/// 3. picking the shortest distance between p3 and the points.
+/// The line is the haversine line with endpoints p1 and p2
+/// Point p3 is the point that the shortest distance to the line between p1 and p2 will be calculated from.
+/// The distance is calculated by the bisection method
 pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
-    let my_dist = Haversine.distance(p1, p2)/100.0;
-    let my_points = Haversine.points_along_line(p1, p2, my_dist, true);
+    // Initial ratios
+    let mut a = 0.0;
+    let mut b = 1.0;
+    let mut c: f64;
 
-    println!("p1: {:?}",p1);
-    println!("p2: {:?}",p2);
-    println!("p3: {:?}",p3);
+    // End conditions
+    let tolerance = 1.0;    // 1 meter
+    let max_loops = 150;
+    let mut n = 0;
 
-    let mut min_dist: f64 = std::f64::MAX;
-    let mut p_return: geo::Point = geo::Point::new(0.0, 0.0);
+    // Init points
+    let mut a_point: geo::Point;
+    let mut b_point: geo::Point;
+    let mut c_point = p3;   // Initialized to p3 just in case
+    // Init dist variables
+    let mut a_dist: f64;
+    let mut b_dist: f64;
+    let mut c_dist: f64;
 
-    for point in my_points {
-        // If distance is shorter than min_dist, make that distance the new min_dist
-        let check_dist = Haversine.distance(point, p3);
-        if check_dist < min_dist {
-            min_dist = check_dist;
-            p_return = point;
+    // Attempt bisecting for max_loops
+    while n <= max_loops {
+        // Find c, the midpoint between a and b
+        c = (a+b)/2.0;
+
+        // make h a 1000 times smaller than the space between a and b
+        let h = (b-a)/1000.0;
+
+        // find f'(a), f'(b) and f'(c)
+        a_point = Haversine.point_at_ratio_between(p1, p2, a);
+        b_point = Haversine.point_at_ratio_between(p1, p2, b);
+        c_point = Haversine.point_at_ratio_between(p1, p2, c);
+        let a_h_point = Haversine.point_at_ratio_between(p1, p2, a+h);
+        let c_h_point = Haversine.point_at_ratio_between(p1, p2, c+h);
+        a_dist = Haversine.distance(a_point, p3);
+        b_dist = Haversine.distance(b_point, p3);
+        c_dist = Haversine.distance(c_point, p3);
+        let a_h_dist = Haversine.distance(a_h_point, p3);
+        let c_h_dist = Haversine.distance(c_h_point, p3);
+
+        let a_derivative = (a_h_dist - a_dist) / h;
+        let c_derivative = (c_h_dist - c_dist) / h;
+
+        // If distance is zero or difference in a_dist and b_dist is smaller than tolerance, return c_dist
+        if c_dist < tolerance || (a_dist - b_dist).abs() / 2.0 < tolerance {
+            return haversine_distance_uom_units(c_point, p3);
         }
+
+        // If root between a and c, move b to c
+        if a_derivative*c_derivative < 0.0 {
+            b = c;
+        }
+        else {
+            a = c;
+        }
+        n += 1;
     }
 
-    println!("p_return: {:?}", p_return);
-
     // Get and return the distance between the point and the line
-    return haversine_distance_uom_units(p3, p_return);
+    return haversine_distance_uom_units(c_point, p3);
 }
 
 /// Get shortest distance between line and point

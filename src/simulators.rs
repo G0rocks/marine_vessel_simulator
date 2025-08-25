@@ -628,7 +628,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * 0.01;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
-        
         // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
