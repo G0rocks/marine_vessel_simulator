@@ -711,8 +711,7 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
     // Find z in orthogonal projection of p3 onto the line p1-p2
     let u: geo::Point = p2 - p1; // Vector from p1 to p2
-    //let u: geo::Point = geo::Point::new(p2.x() - p1.x(), p2.y() - p1.y()); // Vector from p1 to p2
-    let y: geo::Point = geo::Point::new(p3.x() - p1.x(), p3.y() - p1.y()); // Vector from p1 to p3
+    let y: geo::Point = p3 - p1; // Vector from p1 to p3
     let u_to_y_hat_multiplier: f64 = (y.x()*u.x() + y.y()*u.y()) / (u.x()*u.x() + u.y()*u.y());
     let y_hat = geo::Point::new(u.x() * u_to_y_hat_multiplier, u.y() * u_to_y_hat_multiplier); // Orthogonal projection of y onto u
     let z: geo::Point = y - y_hat; // Point of orthogonal projection
@@ -1123,20 +1122,45 @@ mod tests {
     fn min_haversine_distance_test() {
         println!("Testing min_haversine_distance function...");
         println!("Earth radius: {} meters", geo::Haversine.radius());
-        // First test short distance
+        // First test short distance on both sides
         let lon1 = 0.0;
         let lat1 = 0.0;
         let lon2 = 100.0;
         let lat2 = 0.0;
         let lon3 = 50.0;
         let lat3 = 10.0;
+        let lon4 = 50.0;
+        let lat4 = -10.0;
         let p1 = geo::Point::new(lon1, lat1);
         let p2 = geo::Point::new(lon2, lat2);
         let p3 = geo::Point::new(lon3, lat3);
+        let p4 = geo::Point::new(lon4, lat4);
+        let correct_dist = geo::Haversine.radius() * (lat3*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
         let dist = min_haversine_distance(p1, p2, p3);
-        assert_eq!(dist.get::<uom::si::length::kilometer>(), 1111.950802335329128468111081452);
+        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        let dist = min_haversine_distance(p1, p2, p4);
+        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
 
-        // Then test long distance
-
+        // Then test long distance across angle on both sides
+        let lon1 = 0.0;
+        let lat1 = 0.0;
+        let lon2 = 50.0;
+        let lat2 = 45.0;
+        let lon3 = 0.0;
+        let lat3 = 90.0;
+        let lon4 = 100.0;
+        let lat4 = 0.0;
+        let p1 = geo::Point::new(lon1, lat1);
+        let p2 = geo::Point::new(lon2, lat2);
+        let p3 = geo::Point::new(lon3, lat3);
+        let p4 = geo::Point::new(lon4, lat4);
+        let angle = 45.0;
+        let correct_dist = geo::Haversine.radius() * (angle*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
+        let dist = min_haversine_distance(p1, p2, p3);
+        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        // let angle = ;
+        let correct_dist = 6949.25;
+        let dist = min_haversine_distance(p1, p2, p4);
+        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
     }
 }
