@@ -707,6 +707,7 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 /// Get shortest distance between line and point
 /// The line is made up of the points p1 and p2
 /// Point p3 is the line that the shortest distance will be calculated from.
+/// The distance is calculated using an orthogonal projection of p3 onto the line p1-p2 and then calculating the haversine distance between p3 and the point of orthogonal projection
 pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
     // Find z in orthogonal projection of p3 onto the line p1-p2
     let u: geo::Point = p2 - p1; // Vector from p1 to p2
@@ -1112,7 +1113,30 @@ pub fn north_angle_from_north_and_eastward_wind(eastward: f64, northward: f64) -
 
 
 
-
-
-
 // Set up tests here
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Test min_haversine_distance function
+    #[test]
+    fn min_haversine_distance_test() {
+        println!("Testing min_haversine_distance function...");
+        println!("Earth radius: {} meters", geo::Haversine.radius());
+        // First test short distance
+        let lon1 = 0.0;
+        let lat1 = 0.0;
+        let lon2 = 100.0;
+        let lat2 = 0.0;
+        let lon3 = 50.0;
+        let lat3 = 10.0;
+        let p1 = geo::Point::new(lon1, lat1);
+        let p2 = geo::Point::new(lon2, lat2);
+        let p3 = geo::Point::new(lon3, lat3);
+        let dist = min_haversine_distance(p1, p2, p3);
+        assert_eq!(dist.get::<uom::si::length::kilometer>(), 1111.950802335329128468111081452);
+
+        // Then test long distance
+
+    }
+}
