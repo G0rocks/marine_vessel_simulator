@@ -531,14 +531,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
         // let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
-
-
-        // Debug print
-
-        println!("Iteration: {}, Boat location: {:?}, Time: {}", iterations, boat.location.unwrap(), boat_time_now);
-        println!("Working time step: {:.2} hours", working_time_step/60.0/60.0);
-
-
         
         // Get wind and oc (ocean current) data from Copernicus
         let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
@@ -628,7 +620,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * 0.01;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
-        
         // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
