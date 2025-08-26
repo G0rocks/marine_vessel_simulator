@@ -531,14 +531,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
         // let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
-
-
-        // Debug print
-
-        println!("Iteration: {}, Boat location: {:?}, Time: {}", iterations, boat.location.unwrap(), boat_time_now);
-        println!("Working time step: {:.2} hours", working_time_step/60.0/60.0);
-
-
         
         // Get wind and oc (ocean current) data from Copernicus
         let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
@@ -628,7 +620,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * 0.01;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
-        
         // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
@@ -767,12 +758,10 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             // If heading is bearing, stay on track
             if boat.heading.unwrap() == bearing_to_next_waypoint {
                 // Move to new location
-                println!("Heading to bearing, staying course!");
                 boat.location = Some(new_location);
             }
             // If currently at least half of tacking width away from leg line, but new location is closer than current location, do not tack
             else if (current_loc_min_dist_to_leg_line >= tacking_width/2.0) && (new_loc_min_dist_to_leg_line < current_loc_min_dist_to_leg_line) {
-                println!("No tacking! Current loc min dist to leg line: {:.2} km, New loc min dist to leg line: {:.2} km, tacking width/2: {:.2} km", current_loc_min_dist_to_leg_line.get::<uom::si::length::kilometer>(), new_loc_min_dist_to_leg_line.get::<uom::si::length::kilometer>(), tacking_width.get::<uom::si::length::kilometer>()/2.0);
                 // Move to new location
                 boat.location = Some(new_location);
             }
@@ -784,24 +773,11 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 // Minimum distance from current location to new location
                 let dist_to_new_location = new_loc_min_dist_to_leg_line - current_loc_min_dist_to_leg_line;
 
-
-                println!("Tacking! Current loc min dist to leg line: {:.2} km, New loc min dist to leg line: {:.2} km, tacking width/2: {:.2} km", current_loc_min_dist_to_leg_line.get::<uom::si::length::kilometer>(), new_loc_min_dist_to_leg_line.get::<uom::si::length::kilometer>(), tacking_width.get::<uom::si::length::kilometer>()/2.0);
-                println!("Calculating new travel_dist. Old travel_dist = {:.2} km", travel_dist.get::<uom::si::length::kilometer>());
-
-
                 // Distance to tacking edge along current heading, see issue #21 for details https://github.com/G0rocks/marine_vessel_simulator/issues/21
                 travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location);
 
                 // Update location
                 new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>());
-
-                println!("Comparing test location and new_location");
-                println!("New location: {:?}", new_location);
-
-                println!("Travel_dist = {:.2} km", travel_dist.get::<uom::si::length::kilometer>());
-                println!("Wind angle = {:.2} °", wind.angle);
-                println!("Heading = {:.2} °", boat.heading.unwrap());
-                println!("Bearing: {:.2} °", bearing_to_next_waypoint);
 
                 // Tack
                 boat.tack(wind.angle);
@@ -809,18 +785,10 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 // Set temp_time_step to time left in simulation time_step after moving to tacking edge
                 let time_passed = (travel_dist / working_velocity).get::<uom::si::time::second>();
                 temp_time_step = Some(working_time_step - time_passed);
-                
-                println!("Heading = {:.2} °", boat.heading.unwrap());
-                println!("Dist to tacking edge = {:.2} km", dist_to_tacking_edge.get::<uom::si::length::kilometer>());
-                println!("Dist to new location = {:.2} km", dist_to_new_location.get::<uom::si::length::kilometer>());
-                println!("Tack time_passed: {:.2} hours and temp_time_step: {:.2} hours", time_passed/60.0/60.0, temp_time_step.unwrap()/60.0/60.0);
-                println!("Working velocity = {:.2} m/s", working_velocity.get::<uom::si::velocity::meter_per_second>());
-        
             }
-            // Default case, stay course
+            // Default case, if all else fails, stay course
             else {
                 // Move to new location
-                println!("Default case staying course!");
                 boat.location = Some(new_location);
             }
 
