@@ -248,13 +248,14 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&str>, speed_mean_vec: Vec<uom::si::f64::Velocity>, speed_std_vec: Vec<uom::si::f64::Velocity>, cargo_mean_vec: Vec<Option<uom::si::f64::Mass>>, cargo_std_vec: Vec<Option<uom::si::f64::Mass>>, travel_time_mean_vec: Vec<time::Duration>, travel_time_std_vec: Vec<time::Duration>, dist_mean_vec: Vec<uom::si::f64::Length>, dist_std_vec: Vec<uom::si::f64::Length>, num_trips_vec: Vec<u64>) -> Result<String, io::Error> {
     // Check if csv_file_path ends with ".csv"
     let num_chars = csv_file_path.chars().count();
-    println!("Seinustu 4: {}",&csv_file_path[(num_chars-4)..]);
+    if &csv_file_path[(num_chars-4)..] != ".csv" {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "The filepath must end with \".csv\""));
+    }
 
 
     // Check if vectors are the same size
     let vec_size = name_vec.len();
-    if speed_mean_vec.len() != vec_size || speed_std_vec.len() != vec_size || cargo_mean_vec.len() != vec_size {
-        println!("All input vectors must have the same length");
+    if speed_mean_vec.len() != vec_size || speed_std_vec.len() != vec_size || cargo_mean_vec.len() != vec_size || cargo_std_vec.len() != vec_size || travel_time_mean_vec.len() != vec_size || travel_time_std_vec.len() != vec_size || dist_mean_vec.len() != vec_size || dist_std_vec.len() != vec_size || num_trips_vec.len() != vec_size {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "All input vectors must have the same length"));
     }
 
