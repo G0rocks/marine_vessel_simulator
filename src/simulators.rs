@@ -452,7 +452,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
     }
-    // Todo: Add drag
+    // TODO: Add drag
     // if boat.hull_drag_coefficient.is_none() {
     //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
     // }
@@ -502,7 +502,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     let mut bearing_to_next_waypoint: f64;
     let mut new_location: geo::Point;   // Init
     let mut temp_time_step: Option<f64> = None; // Temporary time step, used if the time step is longer than needed to reach a waypoint in seconds
-    // Todo: Add number of tacks?
+    // TODO: Add number of tacks?
 
     // Loop through each time step
     let mut iterations: usize = 0;
@@ -526,7 +526,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Get weather data for current location from weather data file
         // Wind speed and direction
-        // ToDO
         let boat_time_now = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
@@ -548,19 +547,19 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // let oc_east = oc_netcdf_root.variable("uo").expect("No variable: eastward_wind");
         // let oc_north = oc_netcdf_root.variable("vo").expect("No northward_wind var");
 
-        // let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
-        // let wind_east_scale_factor = match wind_east_scale_factor_attr_val {
-        //     netcdf::AttributeValue::Double(v) => v as f32,
-        //     _ => panic!("scale_factor was not a Double"),
-        // };
-        // println!("Scale factor for wind_east: {:?}", wind_east_scale_factor);
-        
-        // let wind_east_add_offset_attr_val = wind_east.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
-        // let wind_east_add_offset = match wind_east_add_offset_attr_val {
-        //     netcdf::AttributeValue::Double(v) => v as f32,
-        //     _ => panic!("scale_factor was not a Double"),
-        // };
-        // println!("Add offset for wind_east: {:?}", wind_east_add_offset);
+        // get scale factor for easterly wind
+        let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_east_scale_factor = match wind_east_scale_factor_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f64,
+            _ => panic!("scale_factor was not a Double"),
+        };
+
+        // get add offset for easterly wind
+        let wind_east_add_offset_attr_val = wind_east.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_east_add_offset = match wind_east_add_offset_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f64,
+            _ => panic!("scale_factor was not a Double"),
+        };
 
         // let wind_east_fill_value_attr_val = wind_east.attribute("fill_value").expect("No fill value found").value().expect("Could not get fill value");
         // let wind_east_fill_value = match wind_east_fill_value_attr_val {
@@ -568,6 +567,20 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         //     _ => panic!("fill_value was not a Double"),
         // };
         // println!("Fill value for wind_east: {:?}", wind_east_fill_value);
+
+        // get scale factor for northerly wind
+        let wind_north_scale_factor_attr_val = wind_north.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_north_scale_factor = match wind_north_scale_factor_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f64,
+            _ => panic!("scale_factor was not a Double"),
+        };
+        
+        // get add offset for northerly wind
+        let wind_north_add_offset_attr_val = wind_north.attribute("add_offset").expect("No scale factor found").value().expect("Could not get scale factor value");
+        let wind_north_add_offset = match wind_north_add_offset_attr_val {
+            netcdf::AttributeValue::Double(v) => v as f64,
+            _ => panic!("scale_factor was not a Double"),
+        };
 
         // Get data vectors from variables
         // let time_data: Vec<i64> = time_stamp.get_values(netcdf::Extents::All).expect("Failed to read time stamps");
@@ -587,7 +600,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // println!("Ocean current east: {:.02}", oc_east_data[0]);
         // println!("Ocean current north: {:.02}", oc_north_data[0]);
 
-        // Todo: Try to delete downloaded file before leaving directory to conserve available storage space on computer
+        // TODO: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
         let wind_filename = wind_netcdf_file.path().expect("Could not get netcdf file path").clone();
         // Stop using netcdf_file so it can be deleted
@@ -612,28 +625,17 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         std::env::set_current_dir(start_dir).expect("Error changing directories");
 
 
-        // panic!("Stop run for debugging");
-
 
         let wind_east: f64 = wind_east_data[0].into();
-        let wind_east = wind_east*0.01;
+        let wind_east = wind_east*wind_east_scale_factor + wind_east_add_offset;
         let wind_north: f64 = wind_north_data[0].into();
-        let wind_north = wind_north * 0.01;
+        let wind_north = wind_north * wind_north_scale_factor + wind_north_add_offset;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
         // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = Wind::new(wind_speed, angle);
         // println!("WIND TEST: {:?}", wind_test);
         // println!("WIND TEST: {:?}", wind);
-
-
-        // todo!("Fix angle calculations!");    // Todo verify angle calculation
-
-        //Todo: Let's only run once while debugging
-        // panic!("Stop run");
-
-
-
 
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -658,7 +660,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             boat.heading = Some(bearing_to_next_waypoint);
         }
 
-        // Todo: use weather data to compute boats actual velocity
+        // TODO: use weather data to compute boats actual velocity
         // Find total force on boat
         // force on boat from wind
         // let wind_force: uom::si::f64::Force = uom::si::f64::Force::new::<uom::si::force::newton>(5.0);
@@ -678,7 +680,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // let final_velocity: uom::si::f64::Velocity = a * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step); // final_velocity in meters per second
 
         // Working velocity is initial velocity plus final velocity divided by 2
-        // todo: implement properly
+        // TODO: implement properly
         working_velocity = wind.speed*1.5;
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
@@ -686,7 +688,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // boat.velocity_current = Some(working_velocity);
 
         // Calculate drag on hull from working velocity
-        //Todo make sure all forces are correct, for now we just want to see the boat tack on the visualization
+        //TODO make sure all forces are correct, for now we just want to see the boat tack on the visualization
 
 
         // Get distance traveled in time step

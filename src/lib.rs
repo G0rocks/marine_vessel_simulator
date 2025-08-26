@@ -400,7 +400,8 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     let mut x_vec: Vec<f64> = Vec::new();
     let mut y_vec: Vec<f64> = Vec::new();
 
-    // Add each waypoint TODO: with label to plot
+    // Add each waypoint
+    // TODO: with label to plot
     let route_plan = load_route_plan(route_plan_file_path);
     for leg in &route_plan {
         // Add the start point to the vectors
@@ -423,7 +424,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     let mut x_vec_starboard: Vec<f64> = Vec::new();
     let mut y_vec_starboard: Vec<f64> = Vec::new();
 
-    // Todo: Add tacking boundary
+    // TODO: Add tacking boundary
     for (i, leg) in route_plan.iter().enumerate() {
         // If tacking width changes between legs, we should first plot the previous width at the current location before plotting the new width
         if i > 0 && leg.tacking_width != route_plan[i-1].tacking_width {
@@ -477,7 +478,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 
 
 
-    // Todo: Add vector at each point that shows wind direction at that point at that points time?????
+    // TODO: Add vector at each point that shows wind direction at that point at that points time?????
 
 
     // Open plot
