@@ -316,92 +316,6 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
     return Ok(("Saved shipping log statistics to csv file").to_string());
 }
 
-// Function for visualizing shipping_logs
-// The starting point is green and the final point is red, the coordinates of those points are shown in the figure.
-// Note: Currently plots to a flat X-Y plane, so the coordinates are not projected onto a globe.
-// ship_logs_file_path: Path to the CSV file where the ship logs are stored
-// figure_file_path: Path to the file where the figure will be saved
-// Example:
-//pub fn visualize_ship_logs_rust_only(ship_logs_file_path: &str, figure_file_path: &str) -> Result<(), io::Error>{
-//    // Read the CSV file
-//    let mut csv_reader = csv::ReaderBuilder::new()
-//        .delimiter(b';')
-//        .has_headers(true)
-//        .from_path(ship_logs_file_path)
-//        .expect("Failed to open the file");
-//
-//    // Init figure
-//    let figure = BitMapBackend::new(figure_file_path, (640, 480)).into_drawing_area();
-//
-//    figure.fill(&RGBColor(255, 255, 255)).expect("Failed to fill background");
-//
-//    let figure = figure.apply_coord_spec(Cartesian2d::<plotters::coord::types::RangedCoordf32, plotters::coord::types::RangedCoordf32>::new(
-//        0f32..1f32,
-//        0f32..1f32,
-//        (0..640, 0..480),
-//    ));
-//
-//    let dot_and_label = |x: f32, y: f32, lat: f64, lon: f64, color: plotters::style::RGBColor | {
-//        return EmptyElement::at((x, y))
-//            + Circle::new((0, 0), 3, ShapeStyle::from(&color).filled())
-//            + Text::new(
-//                format!("({:.2},{:.2})", lat, lon),
-//                (10, 0),
-//                ("sans-serif", 15.0).into_font(),
-//            );
-//    };
-//
-//    let dot = |x: f32, y: f32| {
-//    return EmptyElement::at((x, y))
-//        + Circle::new((0, 0), 1, ShapeStyle::from(&BLACK).filled());
-//    };
-//
-//    // Iterate through each line of the CSV file to draw the values
-//    for (i, result) in csv_reader.records().enumerate() {
-//        match result {
-//            Ok(log_entry) => {
-//                // Get all values in row as usable data
-//                // let timestamp = log_entry.get(0).expect("No timestamp found").to_string();
-//                let coordinates_current = string_to_point(log_entry.get(2).expect("No current coordinate found").to_string());
-//                // let cargo_on_board = log_entry.get(4).unwrap().to_string();
-//
-//                // if first value, draw initial and final coordinates
-//                if i == 0 {
-//                    // Get coordinates
-//                    let coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
-//                    let coordinates_final = string_to_point(log_entry.get(3).expect("No final coordinate found").to_string());
-//
-//                    // Draw initial coordinate
-//                    let (x,y) = geo_point_to_xy(coordinates_initial);
-//                    figure.draw(&dot_and_label(x, y, coordinates_initial.y(), coordinates_initial.x(), GREEN)).expect("Failed to draw dot and label");
-//
-//                    // Draw final coordinate
-//                    let (x,y) = geo_point_to_xy(coordinates_final);
-//                    figure.draw(&dot_and_label(x, y, coordinates_final.y(), coordinates_final.x(), RED)).expect("Failed to draw dot and label");
-//                }
-//
-//                // Draw point on figure. Each coordinate must be represented by a value between 0 and 1, so we need to convert the coordinates to a value between 0 and 1
-//                // x = 0 is the left side, x = 1 is the right side, y = 0 is the top, y = 1 is the bottom
-//                // figure.draw(&dot_and_label(0.5, 0.6)).expect("Failed to draw dot and label");
-//                let (x, y) = geo_point_to_xy(coordinates_current);
-//                figure.draw(&dot(x, y)).expect("Failed to draw dot");
-//            }
-//            Err(err) => {
-//                eprintln!("Error reading log_entry: {}", err);
-//            }
-//        } // End match
-//    } // End for loop
-//
-//    // TODO: Figure out what this does
-//    figure.present().expect("Failed to present the figure");
-//
-//
-//    // Save figure to file
-//
-//    // Return Ok if all went well
-//    return Ok(());
-//}
-
 
 /// Visualize ship logs with plotly on map
 /// figure_file_path: Option<&str> - Path to the file where the figure will be saved. If None, the figure will not be saved to a file.
@@ -443,7 +357,8 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     // Set layout as instructed by andrei-ng https://github.com/plotly/plotly.rs/pull/301
     let layout = plotly::Layout::new()
         .drag_mode(plotly::layout::DragMode::Zoom)
-        .margin(plotly::layout::Margin::new().top(0).left(0).bottom(0).right(0))
+        .margin(plotly::layout::Margin::new().top(25).left(0).bottom(0).right(0))
+        .auto_size(true)
         .geo(
             plotly::layout::LayoutGeo::new()
                 .showocean(true)
@@ -475,6 +390,11 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     figure.add_trace(trace);
     // Set layout to orthographic
     figure.set_layout(layout);
+    // Get configuration and make responsive for automatically sizing according to window size
+    let fig_config = figure.configuration().clone().responsive(true);
+    // Set config
+    figure.set_configuration(fig_config);
+
 
     // Init vectors for coordinates
     let mut x_vec: Vec<f64> = Vec::new();
@@ -547,25 +467,18 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     y_vec_starboard.push(starboard_point.x());
 
     // Add a lines for the tacking boundary to plot
+    figure.add_trace(plotly::ScatterGeo::new(x_vec_starboard, y_vec_starboard)
+        .mode(plotly::common::Mode::LinesMarkersText)
+        .name("Tacking boundary starboard side"));
     figure.add_trace(plotly::ScatterGeo::new(x_vec_port, y_vec_port)
         .mode(plotly::common::Mode::LinesMarkersText)
         .name("Tacking boundary port side"));
         //.line(plotly::Line::new().color("red")));
-    figure.add_trace(plotly::ScatterGeo::new(x_vec_starboard, y_vec_starboard)
-        .mode(plotly::common::Mode::LinesMarkersText)
-        .name("Tacking boundary starboard side"));
 
 
 
     // Todo: Add vector at each point that shows wind direction at that point at that points time?????
 
-
-    // Set layout
-    // let layout = plotly::Layout::new()
-    //     .title("Ship Logs Visualization");
-    // figure.set_layout(layout);
-        
-    // Set projection to Orthographic
 
     // Open plot
     figure.show();
@@ -574,7 +487,6 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     if let Some(file_path) = figure_file_path {
         figure.write_html(file_path);
     }
-    // figure.write_html("my_fig_plotly_test");
 
     // Return Ok if all went well
     return Ok(());
