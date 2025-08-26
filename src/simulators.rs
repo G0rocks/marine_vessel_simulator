@@ -796,9 +796,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             // Update the location of the boat
             boat.location = Some(new_location);
 
-            // Print dist to middle line from new location
-            println!("Distance to leg line after step: {:.2} km", min_haversine_distance(last_waypoint, next_waypoint, boat.location.unwrap()).get::<uom::si::length::kilometer>());
-
             // Log the new location to the ship log
             let new_log_entry: ShipLogEntry = ShipLogEntry {
                 timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(working_time_step)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),

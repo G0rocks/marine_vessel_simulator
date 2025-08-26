@@ -239,6 +239,82 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
 }
 
+/// Saves the given parameters to a csv file at csv_file_path
+/// Will overwrite any file with the same file name at csv_file_path.
+/// Does not append rows to existing csv files.
+/// csv_file_path must end with ".csv"
+/// names is the first column of the csv file and will help indicate what the statistics are for.
+/// All vectors must have the same length
+pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&str>, speed_mean_vec: Vec<uom::si::f64::Velocity>, speed_std_vec: Vec<uom::si::f64::Velocity>, cargo_mean_vec: Vec<Option<uom::si::f64::Mass>>, cargo_std_vec: Vec<Option<uom::si::f64::Mass>>, travel_time_mean_vec: Vec<time::Duration>, travel_time_std_vec: Vec<time::Duration>, dist_mean_vec: Vec<uom::si::f64::Length>, dist_std_vec: Vec<uom::si::f64::Length>, num_trips_vec: Vec<u64>) -> Result<String, io::Error> {
+    // Check if csv_file_path ends with ".csv"
+    let num_chars = csv_file_path.chars().count();
+    println!("Seinustu 4: {}",&csv_file_path[(num_chars-4)..]);
+
+
+    // Check if vectors are the same size
+    let vec_size = name_vec.len();
+    if speed_mean_vec.len() != vec_size || speed_std_vec.len() != vec_size || cargo_mean_vec.len() != vec_size {
+        println!("All input vectors must have the same length");
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "All input vectors must have the same length"));
+    }
+
+    // Create a CSV writer with a semicolon delimiter
+    let mut wtr = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(csv_file_path)?;
+
+    // Write the header
+    wtr.write_record(&["name","speed_mean[m/s]","speed_std[m/s]","cargo_mean[tons]","cargo_std[tons]","travel_time_mean[days]","travel_time_std[days]","dist_mean[km]","dist_std[m]","num_trips:"])?;
+
+    // Write the ship log entries
+    for i in 0..vec_size {
+        // Get name
+        let name = name_vec[i];
+        // Get speed_mean
+        let speed_mean = &speed_mean_vec[i].get::<uom::si::velocity::meter_per_second>().to_string();
+        // Get speed_std
+        let speed_std = &speed_std_vec[i].get::<uom::si::velocity::meter_per_second>().to_string();
+        // Get cargo_mean, if None, set to empty string
+        let cargo_mean = &match cargo_mean_vec[i] {
+            Some(c) => c.get::<uom::si::mass::ton>().to_string(),
+            None => String::from(""),
+        };
+        // Get cargo_std, if None, set to empty string
+        let cargo_std = &match cargo_std_vec[i] {
+            Some(c) => c.get::<uom::si::mass::ton>().to_string(),
+            None => String::from(""),
+        };
+        // Get travel_time_mean
+        let travel_time_mean = &travel_time_mean_vec[i].to_string();
+        // Get travel_time_std
+        let travel_time_std = &travel_time_std_vec[i].to_string();
+        // Get dist_mean
+        let dist_mean = &dist_mean_vec[i].get::<uom::si::length::kilometer>().to_string();
+        // Get dist_std
+        let dist_std = &dist_std_vec[i].get::<uom::si::length::meter>().to_string();
+        // Get num_trips
+        let num_trips = &num_trips_vec[i].to_string();
+
+        // Write the record
+        wtr.write_record(&[
+            name,
+            speed_mean,
+            speed_std,
+            cargo_mean,
+            cargo_std,
+            travel_time_mean,
+            travel_time_std,
+            dist_mean,
+            dist_std,
+            num_trips,
+        ])?;
+    }
+
+    // Flush and close the writer
+    wtr.flush()?;
+    return Ok(("Saved shipping log statistics to csv file").to_string());
+}
 
 // Function for visualizing shipping_logs
 // The starting point is green and the final point is red, the coordinates of those points are shown in the figure.
