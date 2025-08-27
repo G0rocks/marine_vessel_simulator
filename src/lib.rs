@@ -212,7 +212,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             speed_std = std;
         },
         Err(e) => {
-            eprintln!("Error calculating speed mean and std. Set to zero. Error message: {}", e);
+            // eprintln!("Error calculating speed mean and std. Set to zero. Error message: {}", e);
             speed_mean = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
             speed_std = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
         }
@@ -223,7 +223,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             cargo_std = std;
         },
         Err(e) => {
-            eprintln!("Error calculating cargo mean and std. Set to None. Error message: {}", e);
+            // eprintln!("Error calculating cargo mean and std. Set to None. Error message: {}", e);
             cargo_mean = None;
             cargo_std = None;
         }
