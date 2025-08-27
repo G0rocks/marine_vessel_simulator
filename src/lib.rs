@@ -358,7 +358,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     // Set layout as instructed by andrei-ng https://github.com/plotly/plotly.rs/pull/301
     let layout = plotly::Layout::new()
         .drag_mode(plotly::layout::DragMode::Zoom)
-        .margin(plotly::layout::Margin::new().top(25).left(0).bottom(0).right(0))
+        .margin(plotly::layout::Margin::new().top(20).left(10).bottom(30).right(10))
         .auto_size(true)
         .geo(
             plotly::layout::LayoutGeo::new()
@@ -392,7 +392,7 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     // Set layout to orthographic
     figure.set_layout(layout);
     // Get configuration and make responsive for automatically sizing according to window size
-    let fig_config = figure.configuration().clone().responsive(true);
+    let fig_config = figure.configuration().clone().responsive(true).fill_frame(true);
     // Set config
     figure.set_configuration(fig_config);
 
@@ -436,8 +436,8 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
             // Get point half a tacking width to the left and right of the leg
             let bearing = Haversine.bearing(last_leg.p1, last_leg.p2);
             // Get the left and right points but at the location of the current leg
-            let port_point = Haversine.destination(leg.p1, bearing - 90.0, last_tacking_width.get::<uom::si::length::meter>() / 2.0);
-            let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, last_tacking_width.get::<uom::si::length::meter>() / 2.0);
+            let port_point = Haversine.destination(leg.p1, bearing - 90.0, last_tacking_width / 2.0);
+            let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, last_tacking_width / 2.0);
 
             x_vec_port.push(port_point.y());
             y_vec_port.push(port_point.x());
@@ -448,8 +448,8 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
         // Get point half a tacking width to the left and right of the leg
         let bearing = Haversine.bearing(leg.p1, leg.p2);
         // Get the left and right points
-        let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
-        let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+        let port_point = Haversine.destination(leg.p1, bearing - 90.0, leg.tacking_width / 2.0);
+        let starboard_point = Haversine.destination(leg.p1, bearing + 90.0, leg.tacking_width / 2.0);
 
         x_vec_port.push(port_point.y());
         y_vec_port.push(port_point.x());
