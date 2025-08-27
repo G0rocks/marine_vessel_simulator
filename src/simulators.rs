@@ -195,7 +195,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
         cargo_on_board: Some(boat.cargo_current),
-        velocity: boat.velocity_mean,
+        velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), 0.0)),  // Initial velocity is defaulted to direction zero degrees
         course: None,
         heading: None,
         true_bearing: None,
@@ -235,7 +235,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                         coordinates_current: boat.location.unwrap(),
                         coordinates_final: coordinates_final,
                         cargo_on_board: Some(boat.cargo_current),
-                        velocity: boat.velocity_mean,
+                        velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
                         course: None,
                         heading: boat.heading,
                         true_bearing: None,
@@ -273,7 +273,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                     coordinates_current: boat.location.unwrap(),
                     coordinates_final: coordinates_final,
                     cargo_on_board: Some(boat.cargo_current),
-                    velocity: boat.velocity_mean,
+                    velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
                     course: None,
                     heading: boat.heading,
                     true_bearing: None,
@@ -310,10 +310,10 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
     // Get total number of legs
     let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
 
-    // Init travel_dist
-    let mut travel_dist: uom::si::f64::Length;
-    // init working velocity
-    let mut working_velocity: uom::si::f64::Velocity;
+    // Init travel_dist, unit [m]
+    let mut travel_dist: f64;
+    // init working velocity, unit [m/s]
+    let mut working_velocity: PhysVec;
 
     // Init ship_log_entry
     // Get initial location
@@ -341,18 +341,17 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
     for i in 0..simulation.max_iterations {
         // Simulate the boat moving towards the next waypoint
         // Working velocity is mean velocity plus a random standard deviation from the mean
-        working_velocity = boat.velocity_mean.unwrap() + uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(rand::random_range(-1.0..=1.0) * boat.velocity_std.unwrap().get::<uom::si::velocity::meter_per_second>());
+        working_velocity = PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>() + rand::random_range(-1.0..=1.0) * boat.velocity_std.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap());
 
-        // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(simulation.time_step.whole_seconds() as f64); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        // Get distance traveled in time step, unit [m]
+        travel_dist = working_velocity.magnitude * simulation.time_step.as_seconds_f64();
 
         // While still have some distance left to travel during time step
-        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
-
+        while travel_dist > 0.0 {
             // Get next waypoint
             let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
             // Get distance to next waypoint from current location
-            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+            let dist_to_next_waypoint: f64 = Haversine.distance(boat.location.unwrap(), next_waypoint);
 
             // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
             if travel_dist > dist_to_next_waypoint {
@@ -394,8 +393,8 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                 // Get bearing to next waypoint
                 let bearing = Haversine.bearing(boat.location.unwrap(), next_waypoint);
 
-                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+                // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint, important to use meters for travel_dist
+                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist);
 
                 // Update the location of the boat
                 boat.location = Some(new_location);
@@ -468,23 +467,23 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Get total number of legs
     let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
 
-    // Init travel_dist
-    let mut travel_dist: uom::si::f64::Length;
-    // init working velocity
-    let mut working_velocity: uom::si::f64::Velocity;
+    // Init travel_dist, unit [m]
+    let mut travel_dist: f64;
+    // init working velocity, unit [m/s]
+    let mut working_velocity: PhysVec;
 
-    // Init ship_log_entry
     // Get initial location
     let coordinates_initial = boat.location.unwrap();
     // Get final location to last waypoint
-    let coordinates_final = boat.route_plan.as_ref().unwrap()[total_legs - 1].p2;                
+    let coordinates_final = boat.route_plan.as_ref().unwrap()[total_legs - 1].p2;
+    // Init ship_log_entry
     let new_log_entry: ShipLogEntry = ShipLogEntry {
         timestamp: time::UtcDateTime::new(time::Date::from_calendar_date(start_time.year(), start_time.month(), start_time.day()).expect("Could not make time::Date from values"), time::Time::from_hms(start_time.hour(), start_time.minute(), start_time.second()).expect("Could not make time::Time from values")),
         coordinates_initial: coordinates_initial,
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
         cargo_on_board: Some(boat.cargo_current),
-        velocity: Some(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0)), // Start at 0 m/s
+        velocity: Some(PhysVec::new(0.0, 0.0)), // Start at 0 m/s with heading 0°
         course: None,
         heading: None,  // Note perhaps we can change this to be better, in the future
         true_bearing: None,
@@ -494,11 +493,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Push first ship log entry
     boat.ship_log.push(new_log_entry);
 
-    // Init wind vector
-    let mut wind: Wind; // = Wind::new(uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(5.0), 0.0); // Placeholder for wind speed, should be replaced with actual weather data from file
-    // Init next waypoint
+    // Init wind vector, unit [m/s]
+    let mut wind: PhysVec;
+    // Init waypoints
     let mut last_waypoint: geo::Point;
     let mut next_waypoint: geo::Point;
+    // Init bearing and other variables used in loop
     let mut bearing_to_next_waypoint: f64;
     let mut new_location: geo::Point;   // Init
     let mut temp_time_step: Option<f64> = None; // Temporary time step, used if the time step is longer than needed to reach a waypoint in seconds
@@ -524,28 +524,27 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Get tacking width from route plan
         let tacking_width = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
-        // Get weather data for current location from weather data file
-        // Wind speed and direction
+        // Get boat current time and location
         let boat_time_now = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
-        // let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, -7.1, 7.2, -7.3, 7.4);
         
-        // Get wind and oc (ocean current) data from Copernicus
+        // Get wind and ocean current data from Copernicus, netcdf file
         let wind_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(),"northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);
-        // let oc_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
+        let ocean_current_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
 
+        // Get netcdf root from netcdf file for wind and ocean current
         let wind_netcdf_root =  wind_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
-        // let oc_netcdf_root =  oc_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
+        let ocean_current_netcdf_root =  ocean_current_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
 
-        // Get variables from netcdf file
+        // Get variables from netcdf root
         // let time_stamp = wind_netcdf_root.variable("time").expect("No variable: time");
         // let lat = wind_netcdf_root.variable("latitude").expect("No variable: latitude");
         // let lon = wind_netcdf_root.variable("longitude").expect("No variable: longitude");
         let wind_east = wind_netcdf_root.variable("eastward_wind").expect("No variable: eastward_wind");
         let wind_north = wind_netcdf_root.variable("northward_wind").expect("No northward_wind var");
-        // let oc_east = oc_netcdf_root.variable("uo").expect("No variable: eastward_wind");
-        // let oc_north = oc_netcdf_root.variable("vo").expect("No northward_wind var");
+        let ocean_current_east = ocean_current_netcdf_root.variable("uo").expect("No variable: eastward_wind");
+        let ocean_current_north = ocean_current_netcdf_root.variable("vo").expect("No northward_wind var");
 
         // get scale factor for easterly wind
         let wind_east_scale_factor_attr_val = wind_east.attribute("scale_factor").expect("No scale factor found").value().expect("Could not get scale factor value");
@@ -588,8 +587,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // let lon_data: Vec<f64> = lon.get_values(netcdf::Extents::All).expect("Failed to read latitude");
         let wind_east_data: Vec<f32> = wind_east.get_values(netcdf::Extents::All).expect("Failed to read eastward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         let wind_north_data: Vec<f32> = wind_north.get_values(netcdf::Extents::All).expect("Failed to read northward wind");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
-        // let oc_east_data: Vec<f32> = oc_east.get_values(netcdf::Extents::All).expect("Failed to read eastward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
-        // let oc_north_data: Vec<f32> = oc_north.get_values(netcdf::Extents::All).expect("Failed to read northward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let ocean_current_east_data: Vec<f32> = ocean_current_east.get_values(netcdf::Extents::All).expect("Failed to read eastward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
+        let ocean_current_north_data: Vec<f32> = ocean_current_north.get_values(netcdf::Extents::All).expect("Failed to read northward ocean current");    // Scale factor is 0.01 according to page 21 of https://documentation.marine.copernicus.eu/PUM/CMEMS-WIND-PUM-012-004-006.pdf
         // println!("Timestamp: {:?}", copernicusmarine_rs::secs_since_1990_01_01_0_to_utcdatetime(time_data[0]));
         // println!("Latitude: {:?}", lat_data[0]);
         // println!("Longitude: {:?}", lon_data[0]);
@@ -597,8 +596,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // println!("north wind 2: {:.02}", wind_north_data[1]);
         // println!("Wind east: {:.02}", wind_east_data[0]*wind_east_scale_factor + wind_east_add_offset);
         // println!("Wind north: {:.02}", wind_north_data[0]*0.01);
-        // println!("Ocean current east: {:.02}", oc_east_data[0]);
-        // println!("Ocean current north: {:.02}", oc_north_data[0]);
+        println!("Ocean current east: {:.02}", ocean_current_east_data[0]);
+        println!("Ocean current north: {:.02}", ocean_current_north_data[0]);
 
         // TODO: Try to delete downloaded file before leaving directory to conserve available storage space on computer
         // Copy netcdf_file name
@@ -625,17 +624,19 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         std::env::set_current_dir(start_dir).expect("Error changing directories");
 
 
-
+        // Wind speed and direction
         let wind_east: f64 = wind_east_data[0].into();
         let wind_east = wind_east*wind_east_scale_factor + wind_east_add_offset;
         let wind_north: f64 = wind_north_data[0].into();
         let wind_north = wind_north * wind_north_scale_factor + wind_north_add_offset;
         let angle: f64 = north_angle_from_north_and_eastward_wind(wind_east, wind_north);   // Angle in degrees
-        // println!("Wind north: {}\nWind east: {}", wind_north, wind_east);
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
-        wind = Wind::new(wind_speed, angle);
+        wind = PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), angle);    // unit [m/s]
         // println!("WIND TEST: {:?}", wind_test);
         // println!("WIND TEST: {:?}", wind);
+
+        // Get ocean current speed and direction
+
 
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -681,24 +682,24 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // TODO: implement properly
-        working_velocity = wind.speed*1.5;
+        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
         // boat.velocity_current = Some(working_velocity);
 
         // Calculate drag on hull from working velocity
-        //TODO make sure all forces are correct, for now we just want to see the boat tack on the visualization
+        //TODO make sure all forces are correct
 
 
         // Get distance traveled in time step
-        travel_dist = working_velocity * uom::si::f64::Time::new::<uom::si::time::second>(working_time_step); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times        
+        travel_dist = working_velocity.magnitude * working_time_step; // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times        
 
         // Get next waypoint
         next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
 
         // Get distance to next waypoint from current location
-        let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+        let dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
 
         // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
         if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
@@ -706,7 +707,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             boat.location = Some(next_waypoint);
 
             // Set temp_time_step to time left in simulation time_step after moving to (now current) waypoint
-            let time_passed = dist_to_next_waypoint.get::<uom::si::length::meter>() / working_velocity.get::<uom::si::velocity::meter_per_second>();
+            let time_passed = dist_to_next_waypoint / working_velocity.magnitude;
             temp_time_step = Some(working_time_step - time_passed);
 
             // Add ship log entry at new location
@@ -751,8 +752,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         }
         // Otherwise, move boat forwards along heading and log to ship_log
         else {
-            // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-            new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+            // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint, important to use unit [meter] for travel_dist
+            new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
             // If new location is further away from leg line than half of tacking width, tack before moving
             let new_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, new_location);
             let current_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, boat.location.unwrap());
@@ -779,13 +780,13 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location);
 
                 // Update location
-                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist.get::<uom::si::length::meter>());
+                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
 
                 // Tack
                 boat.tack(wind.angle);
 
                 // Set temp_time_step to time left in simulation time_step after moving to tacking edge
-                let time_passed = (travel_dist / working_velocity).get::<uom::si::time::second>();
+                let time_passed = travel_dist / working_velocity.magnitude;
                 temp_time_step = Some(working_time_step - time_passed);
             }
             // Default case, if all else fails, stay course
@@ -815,7 +816,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
             // Push the new log entry to the ship log
             boat.ship_log.push(new_log_entry);
-        }
+        }   // End else
     } // End for loop
 
     // Simulation ran through all the iterations, return ship log and error that the simulation did not finish

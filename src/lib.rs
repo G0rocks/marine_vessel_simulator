@@ -11,7 +11,7 @@ use csv;    use geo::InterpolatePoint;
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
-use std::{io}; // To use errors
+use std::{io, fmt}; // To use errors and for formatting
 // use plotters; // Plotters for visualizing data on a map. Uses only rust, no javascript. Will probably be removed in favor of plotly
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
@@ -33,24 +33,39 @@ pub use crate::vessels::*; // Import the simulators module
 
 // Structs and enums
 //----------------------------------------------------
-/// Struct that holds wind data
-#[derive(Debug)]
-pub struct Wind {
-    /// Wind speed
-    pub speed: uom::si::f64::Velocity,
-    /// Wind direction in degrees, 0° is north, 90° is east, 180° is south, 270° is west
+/// A physics vector struct that holds vector data... for physics :)
+#[derive(Debug, Copy, Clone)]
+pub struct PhysVec {
+    /// Magnitude, make sure that the units are correct
+    pub magnitude: f64,
+    /// Direction in degrees, 0° is north, 90° is east, 180° is south, 270° is west
     pub angle: f64,
 }
 
-impl Wind {
+impl PhysVec {
     /// Creates a new wind object
-    pub fn new(speed: uom::si::f64::Velocity, angle: f64) -> Wind {
-        Wind {
-            speed,
+    pub fn new(magnitude: f64, angle: f64) -> PhysVec {
+        PhysVec {
+            magnitude,
             angle,
         }
     }
 }
+
+/// std::Display for PhysVec
+impl fmt::Display for PhysVec {
+    /// format for PhysVec
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Write strictly the first element into the supplied output
+        // stream: `f`. Returns `fmt::Result` which indicates whether the
+        // operation succeeded or failed. Note that `write!` uses syntax which
+        // is very similar to `println!`.
+        write!(f, "magnitude: {}, angle: {}", self.magnitude, self.angle)
+    }
+}
+
+
+
 
 
 // Functions
@@ -459,9 +474,9 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
     // Add last point to the vectors
     let bearing = Haversine.bearing(last_leg.p1, last_leg.p2);
     // Get the left and right points
-    let port_point = Haversine.destination(last_leg.p2, bearing - 90.0, last_leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+    let port_point = Haversine.destination(last_leg.p2, bearing - 90.0, last_leg.tacking_width / 2.0);
     //let right_point = leg.p1.destination(leg.tacking_width / 2.0, bearing + 90.0);
-    let starboard_point = Haversine.destination(last_leg.p2, bearing + 90.0, last_leg.tacking_width.get::<uom::si::length::meter>() / 2.0);
+    let starboard_point = Haversine.destination(last_leg.p2, bearing + 90.0, last_leg.tacking_width / 2.0);
     // Append points
     x_vec_port.push(port_point.y());
     y_vec_port.push(port_point.x());
@@ -699,7 +714,8 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 /// The line is the haversine line with endpoints p1 and p2
 /// Point p3 is the point that the shortest distance to the line between p1 and p2 will be calculated from.
 /// The distance is calculated by the bisection method
-pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
+/// Returns the distance in meters
+pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> f64 {
     // Initial ratios
     let mut a = 0.0;
     let mut b = 1.0;
@@ -744,7 +760,7 @@ pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) ->
 
         // If distance is zero or difference in a_dist and b_dist is smaller than tolerance, return c_dist
         if c_dist < tolerance || (a_dist - b_dist).abs() / 2.0 < tolerance {
-            return haversine_distance_uom_units(c_point, p3);
+            return Haversine.distance(c_point, p3);
         }
 
         // If root between a and c, move b to c
@@ -758,7 +774,7 @@ pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) ->
     }
 
     // Get and return the distance between the point and the line
-    return haversine_distance_uom_units(c_point, p3);
+    return Haversine.distance(c_point, p3);
 }
 
 /// Get shortest distance between line and point
@@ -1006,7 +1022,7 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
                 let temp_sailing_leg: SailingLeg = SailingLeg {
                     p1: string_to_point(format!("{},{}", start_lat, start_long)),
                     p2: string_to_point(format!("{},{}", end_lat, end_long)),
-                    tacking_width: uom::si::f64::Length::new::<uom::si::length::meter>(tacking_width.parse::<f64>().expect("Invalid tacking width")),
+                    tacking_width: tacking_width.parse::<f64>().expect("Invalid tacking width"),
                 };
 
                 // Add the SailingLeg object to the route plan
@@ -1078,7 +1094,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
 
         // If velocity is None, set to empty string
         let velocity = match entry.velocity {
-            Some(v) => v.get::<uom::si::velocity::meter_per_second>().to_string(),
+            Some(v) => v.to_string(),
             None => String::from(""),
         };
 
@@ -1194,9 +1210,9 @@ mod tests {
         let p4 = geo::Point::new(lon4, lat4);
         let correct_dist = geo::Haversine.radius() * (lat3*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
         let dist = min_haversine_distance(p1, p2, p3);
-        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        assert_eq!(dist/1000.0, correct_dist);
         let dist = min_haversine_distance(p1, p2, p4);
-        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        assert_eq!(dist/1000.0, correct_dist);
 
         // Then test long distance across angle on both sides
         let lon1 = 0.0;
@@ -1214,10 +1230,10 @@ mod tests {
         let angle = 45.0;
         let correct_dist = geo::Haversine.radius() * (angle*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
         let dist = min_haversine_distance(p1, p2, p3);
-        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        assert_eq!(dist/1000.0, correct_dist);
         // let angle = ;
         let correct_dist = 6949.25;
         let dist = min_haversine_distance(p1, p2, p4);
-        assert_eq!(dist.get::<uom::si::length::kilometer>(), correct_dist);
+        assert_eq!(dist/1000.0, correct_dist);
     }
 }

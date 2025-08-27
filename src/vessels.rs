@@ -14,7 +14,8 @@ use crate::*;   // To use everything from the crate
 pub struct SailingLeg {
     pub p1: geo::Point,
     pub p2: geo::Point,
-    pub tacking_width: uom::si::f64::Length,
+    /// Tacking width in [m]
+    pub tacking_width: f64,
 }
 
 /// Struct to hold ship long entry
@@ -27,7 +28,7 @@ pub struct ShipLogEntry {
     pub coordinates_current: geo::Point,
     pub coordinates_final: geo::Point,
     pub cargo_on_board: Option<uom::si::f64::Mass>,
-    pub velocity: Option<uom::si::f64::Velocity>,  // Current velocity of the boat
+    pub velocity: Option<PhysVec>,  // Current velocity of the boat
     pub course: Option<f64>,  // Course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub heading: Option<f64>,  // Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub true_bearing: Option<f64>,  // True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
@@ -126,14 +127,14 @@ pub struct Boat {
     pub width: Option<uom::si::f64::Length>,
     pub draft: Option<uom::si::f64::Length>,
     pub mass: Option<uom::si::f64::Mass>,   /// Mass of the boat without cargo or fuel (a.k.a dry weight)
-    pub velocity_current: Option<uom::si::f64::Velocity>,  /// Current velocity of the boat
-    pub velocity_mean: Option<uom::si::f64::Velocity>,
-    pub velocity_std: Option<uom::si::f64::Velocity>,
+    pub velocity_current: Option<PhysVec>,  /// Current velocity of the boat with magnitude and direction
+    pub velocity_mean: Option<uom::si::f64::Velocity>,  /// The average velocity of the boat, only magnitude
+    pub velocity_std: Option<uom::si::f64::Velocity>,   /// The standard deviation of the velocity of the boat, only magnitude
     pub cargo_max_capacity: Option<uom::si::f64::Mass>,
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
-    pub wind_preferred_side: VesselSide,  // Preferred side for the wind to come from, if any
+    pub wind_preferred_side: VesselSide,  /// Preferred side of the boat for the wind to hit
     pub hull_drag_coefficient: Option<f64>,  /// Coefficient of drag for the hull
     pub ship_log: Vec<ShipLogEntry>,
 }
