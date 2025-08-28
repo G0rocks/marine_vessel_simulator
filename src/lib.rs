@@ -758,6 +758,11 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
 /// The distance is calculated by the bisection method
 /// Returns the distance in meters
 pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> f64 {
+    // Quick check if already at end points, note: if removed this causes a bug at the end points
+    if (p1 == p3) || (p2 == p3) {
+        return 0.0;
+    }
+
     // Initial ratios
     let mut a = 0.0;
     let mut b = 1.0;
@@ -783,7 +788,7 @@ pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) ->
         c = (a+b)/2.0;
 
         // make h a 1000 times smaller than the space between a and b
-        let h = (b-a)/1000.0;
+        let h = (b-a)/10000.0;
 
         // find f'(a), f'(b) and f'(c)
         a_point = Haversine.point_at_ratio_between(p1, p2, a);
@@ -1052,11 +1057,11 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
                 // Get the SailingLeg data from the CSV file
                 // First column is the leg number, so we skip it
                 // Start_coord
-                let start_lat = leg.get(1).expect("Start latitude missing").to_string();
-                let start_long = leg.get(2).expect("Start longitude missing").to_string();
+                let start_lat = leg.get(1).expect("Start latitude missing from route plan").to_string();
+                let start_long = leg.get(2).expect("Start longitude missing from route plan").to_string();
                 // End_coord
-                let end_lat = leg.get(3).expect("End latitude missing").to_string();
-                let end_long = leg.get(4).expect("End longitude missing").to_string();
+                let end_lat = leg.get(3).expect("End latitude missing from route plan").to_string();
+                let end_long = leg.get(4).expect("End longitude missing from route plan").to_string();
                 // Tacking width
                 let tacking_width = leg.get(5).expect("Tacking width missing").to_string();
 
