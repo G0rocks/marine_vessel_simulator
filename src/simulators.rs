@@ -502,6 +502,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
     // Init wind vector, unit [m/s]
     let mut wind: PhysVec;
+    // Init ocean current vector, unit [m/s]
+    let mut ocean_current: PhysVec;
     // Init waypoints
     let mut last_waypoint: geo::Point;
     let mut next_waypoint: geo::Point;
@@ -534,19 +536,20 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Get tacking width from route plan
         let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
+        // Print for debug
+        println!("Current location: {:?}", boat.location.unwrap());
+        println!("Trying to go to: {:?}", next_waypoint);
+        println!("Distance to there: {:.3} km", Haversine.distance(boat.location.unwrap(), next_waypoint)/1000.0);
+
         // Get boat current time and location
         let boat_time_now: UtcDateTime = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
 
-        // let test_time = boat_time_now.clone();
-        // let boat_time_now = test_time.checked_add(time::Duration::new(86400, 0)).unwrap();
-        let test_time = boat_time_now.checked_add(time::Duration::new(86400, 0)).unwrap();
-        
         // Get wind data from Copernicus
-        let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude) {
+        let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
             Ok(w) => w,
-            Err(e) => panic!("Wind test error: {}", e),
+            Err(e) => panic!("Error getting wind data from copernicusmarine: {}", e),
         };
         let wind_east_data = &wind_data[0];
         let wind_north_data = &wind_data[1];
@@ -559,37 +562,20 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         wind = PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), wind_angle);    // unit [m/s]
 
         // Get ocean current data from Copernicus
-        // TODO change test_time to boat_time_now
         // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
-        let ocean_test = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], test_time, test_time, longitude, longitude, latitude, latitude){
+        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
             Ok(o) => o,
-            Err(e) => panic!("Ocean test error: {}", e),
+            Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
         };
-        let east_ocean_test = &ocean_test[0];
-        let north_ocean_test = &ocean_test[1];
-        println!("east Ocean test num values: {}", east_ocean_test.len());
-        println!("north Ocean test num values: {}", north_ocean_test.len());
+        let ocean_current_east_data = &ocean_current_data[0];
+        let ocean_current_north_data = &ocean_current_data[1];
 
-        let ocean_current_netcdf_file = simulation.copernicus.as_ref().unwrap().subset("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(),"vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude);    // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
-
-        // Get netcdf root from netcdf file for wind and ocean current
-        let ocean_current_netcdf_root =  ocean_current_netcdf_file.root().expect("Could not get netcdf root from netcdf file");
-
-        // Get variables from netcdf root
-        let ocean_current_east = ocean_current_netcdf_root.variable("uo").expect("No variable: eastward_wind");
-        let ocean_current_north = ocean_current_netcdf_root.variable("vo").expect("No northward_wind var");
-
-
-        // Get data vectors from variables
-        let ocean_current_east_data: Vec<f64> = ocean_current_east.get_values(netcdf::Extents::All).expect("Failed to read eastward ocean current");
-        let ocean_current_north_data: Vec<f64> = ocean_current_north.get_values(netcdf::Extents::All).expect("Failed to read northward ocean current");
-        println!("East Ocean current data REAL num values. {}", ocean_current_east_data.len());
-        println!("North Ocean current data REAL num values. {}", ocean_current_east_data.len());
-        println!("Ocean current east: {}", ocean_current_east_data[0]);
-        println!("Ocean current north: {}", ocean_current_north_data[0]);
-
-        // Get ocean current speed and direction
-
+        // Ocean current speed and direction
+        let ocean_current_east: f64 = ocean_current_east_data[0];
+        let ocean_current_north: f64 = ocean_current_north_data[0];
+        let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
+        let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
+        ocean_current = PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle);    // unit [m/s]
 
         // Compute heading
         // Compute angle of wind relative to line between current location and next waypoint. North: 0°, East: 90°, South: 180°, West: 270°
@@ -635,11 +621,11 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // TODO: implement properly
-        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
+        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
-        // boat.velocity_current = Some(working_velocity);
+        boat.velocity_current = Some(working_velocity);
 
         // Calculate drag on hull from working velocity
         //TODO make sure all forces are correct
@@ -655,7 +641,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
 
         // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
-        if travel_dist > dist_to_next_waypoint && boat.heading.unwrap() == bearing_to_next_waypoint {
+        if travel_dist > dist_to_next_waypoint && working_velocity.angle == bearing_to_next_waypoint {
             // Move to next waypoint
             boat.location = Some(next_waypoint);
 
