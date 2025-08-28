@@ -64,9 +64,71 @@ impl fmt::Display for PhysVec {
     }
 }
 
+/// std::ops::Add (addition) for PhysVec
+impl std::ops::Add for PhysVec {
+    type Output = Self; // The output type is also Point
 
+    fn add(self, other: Self) -> Self {
+        // Get x,y coord of first PhysVec
+        let x1 = self.magnitude * (self.angle*std::f64::consts::PI/180.0).cos();
+        let y1 = self.magnitude * (self.angle*std::f64::consts::PI/180.0).sin();
+        // Get x,y coord of second PhysVec
+        let x2 = other.magnitude * (other.angle*std::f64::consts::PI/180.0).cos();
+        let y2 = other.magnitude * (other.angle*std::f64::consts::PI/180.0).sin();
+        // Get x,y coord of output PhysVec
+        let x3 = x1 + x2;
+        let y3 = y1 + y2;
+        // Get magnitude
+        let magnitude = (x3*x3 + y3*y3).sqrt();
+        // Get angle
+        let angle = y3.atan2(x3) * 180.0 / std::f64::consts::PI;
+        // let angle = get_north_angle_from_northward_and_eastward_property(x3, y3);
 
+        // Print everything
+        println!("x1: {}", x1);
+        println!("x2: {}", x2);
+        println!("x3: {}", x3);
+        println!("y1: {}", y1);
+        println!("y2: {}", y2);
+        println!("y3: {}", y3);
 
+        // Return output with magnitude and angle of output PhysVec
+        return PhysVec::new(magnitude, angle);
+    }
+}
+
+/// std::ops::Sub (subtraction) for PhysVec
+impl std::ops::Sub for PhysVec {
+    type Output = Self; // The output type is also Point
+
+    fn sub(self, other: Self) -> Self {
+        // Get x,y coord of first PhysVec
+        let x1 = self.magnitude * (self.angle*std::f64::consts::PI/180.0).cos();
+        let y1 = self.magnitude * (self.angle*std::f64::consts::PI/180.0).sin();
+        // Get x,y coord of second PhysVec
+        let x2 = other.magnitude * (other.angle*std::f64::consts::PI/180.0).cos();
+        let y2 = other.magnitude * (other.angle*std::f64::consts::PI/180.0).sin();
+        // Get x,y coord of output PhysVec
+        let x3 = x1 - x2;
+        let y3 = y1 - y2;
+        // Get magnitude
+        let magnitude = (x3*x3 + y3*y3).sqrt();
+        // Get angle
+        let angle = y3.atan2(x3) * 180.0 / std::f64::consts::PI;
+        // let angle = get_north_angle_from_northward_and_eastward_property(x3, y3);
+
+        // Print everything
+        println!("x1: {}", x1);
+        println!("x2: {}", x2);
+        println!("x3: {}", x3);
+        println!("y1: {}", y1);
+        println!("y2: {}", y2);
+        println!("y3: {}", y3);
+
+        // Return output with magnitude and angle of output PhysVec
+        return PhysVec::new(magnitude, angle);
+    }
+}
 
 // Functions
 //----------------------------------------------------
@@ -211,7 +273,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             speed_mean = mean;
             speed_std = std;
         },
-        Err(e) => {
+        Err(_) => {
             // eprintln!("Error calculating speed mean and std. Set to zero. Error message: {}", e);
             speed_mean = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
             speed_std = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
@@ -222,7 +284,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             cargo_mean = mean;
             cargo_std = std;
         },
-        Err(e) => {
+        Err(_) => {
             // eprintln!("Error calculating cargo mean and std. Set to None. Error message: {}", e);
             cargo_mean = None;
             cargo_std = None;
