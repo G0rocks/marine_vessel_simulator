@@ -9,7 +9,7 @@
 use csv;    use geo::InterpolatePoint;
 // CSV reader to read csv files
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
-use geo::{self, Haversine, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
+use geo::{self, Haversine, Rhumb, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::{io, fmt}; // To use errors and for formatting
 // use plotters; // Plotters for visualizing data on a map. Uses only rust, no javascript. Will probably be removed in favor of plotly

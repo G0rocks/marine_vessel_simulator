@@ -198,6 +198,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
         velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), 0.0)),  // Initial velocity is defaulted to direction zero degrees
         course: None,
         heading: None,
+        track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
         true_bearing: None,
         draught: None,
         navigation_status: None,
@@ -238,6 +239,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                         velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
                         course: None,
                         heading: boat.heading,
+                        track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                         true_bearing: None,
                         draught: None,
                         navigation_status: None,
@@ -276,6 +278,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                     velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
                     course: None,
                     heading: boat.heading,
+                    track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                     true_bearing: None,
                     draught: None,
                     navigation_status: None,
@@ -329,6 +332,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
         velocity: None,
         course: None,
         heading: None,
+        track_angle: None,
         true_bearing: None,
         draught: None,
         navigation_status: None,
@@ -371,6 +375,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                         velocity: Some(working_velocity),
                         course: None,
                         heading: boat.heading,
+                        track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                         true_bearing: None,
                         draught: None,
                         navigation_status: None,
@@ -409,6 +414,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                     velocity: Some(working_velocity),
                     course: None,
                     heading: boat.heading,
+                    track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                     true_bearing: None,
                     draught: None,
                     navigation_status: None,
@@ -486,6 +492,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         velocity: Some(PhysVec::new(0.0, 0.0)), // Start at 0 m/s with heading 0°
         course: None,
         heading: None,  // Note perhaps we can change this to be better, in the future
+        track_angle: None,  // First point, can't get the angle from the last point since there is no last point
         true_bearing: None,
         draught: None,
         navigation_status: Some(NavigationStatus::UnderwaySailing),
@@ -498,6 +505,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Init waypoints
     let mut last_waypoint: geo::Point;
     let mut next_waypoint: geo::Point;
+    // The angle (from north) from last to next waypoint
+    let mut course: f64;
     // Init bearing and other variables used in loop
     let mut bearing_to_next_waypoint: f64;
     let mut new_location: geo::Point;   // Init
@@ -521,6 +530,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Get last and next waypoint
         last_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1;
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
+        course = Rhumb.bearing(last_waypoint, next_waypoint);
         // Get tacking width from route plan
         let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
@@ -662,8 +672,9 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 coordinates_final: coordinates_final,
                 cargo_on_board: Some(boat.cargo_current),
                 velocity: Some(working_velocity),
-                course: None,
+                course: Some(course),
                 heading: boat.heading,
+                track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                 true_bearing: None,
                 draught: None,
                 navigation_status: Some(NavigationStatus::UnderwaySailing),
@@ -750,7 +761,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
                 coordinates_final: coordinates_final,
                 cargo_on_board: Some(boat.cargo_current),
                 velocity: Some(working_velocity),
-                course: None,
+                course: Some(course),
+                track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                 heading: boat.heading,
                 true_bearing: None,
                 draught: None,

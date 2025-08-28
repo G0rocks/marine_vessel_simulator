@@ -29,8 +29,9 @@ pub struct ShipLogEntry {
     pub coordinates_final: geo::Point,
     pub cargo_on_board: Option<uom::si::f64::Mass>,
     pub velocity: Option<PhysVec>,  // Current velocity of the boat
-    pub course: Option<f64>,  // Course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub course: Option<f64>,  // Rhumb line course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub heading: Option<f64>,  // Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub track_angle: Option<f64>,   // The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°
     pub true_bearing: Option<f64>,  // True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub draught: Option<uom::si::f64::Length>,  // Draught of the boat at the time of the log entry
     pub navigation_status: Option<NavigationStatus>,  // Navigation status of the boat at the time of the log entry
