@@ -82,16 +82,6 @@ impl std::ops::Add for PhysVec {
         let magnitude = (x3*x3 + y3*y3).sqrt();
         // Get angle
         let angle = y3.atan2(x3) * 180.0 / std::f64::consts::PI;
-        // let angle = get_north_angle_from_northward_and_eastward_property(x3, y3);
-
-        // Print everything
-        println!("x1: {}", x1);
-        println!("x2: {}", x2);
-        println!("x3: {}", x3);
-        println!("y1: {}", y1);
-        println!("y2: {}", y2);
-        println!("y3: {}", y3);
-
         // Return output with magnitude and angle of output PhysVec
         return PhysVec::new(magnitude, angle);
     }
@@ -115,16 +105,6 @@ impl std::ops::Sub for PhysVec {
         let magnitude = (x3*x3 + y3*y3).sqrt();
         // Get angle
         let angle = y3.atan2(x3) * 180.0 / std::f64::consts::PI;
-        // let angle = get_north_angle_from_northward_and_eastward_property(x3, y3);
-
-        // Print everything
-        println!("x1: {}", x1);
-        println!("x2: {}", x2);
-        println!("x3: {}", x3);
-        println!("y1: {}", y1);
-        println!("y2: {}", y2);
-        println!("y3: {}", y3);
-
         // Return output with magnitude and angle of output PhysVec
         return PhysVec::new(magnitude, angle);
     }
