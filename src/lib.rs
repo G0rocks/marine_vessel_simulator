@@ -1063,13 +1063,16 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
                 let end_lat = leg.get(3).expect("End latitude missing from route plan").to_string();
                 let end_long = leg.get(4).expect("End longitude missing from route plan").to_string();
                 // Tacking width
-                let tacking_width = leg.get(5).expect("Tacking width missing").to_string();
+                let tacking_width = leg.get(5).expect("Tacking width missing from route plan").to_string();
+                // Get minimum proximity
+                let min_prox = leg.get(6).expect("Minimum proximity missing from route plan").to_string();
 
                 // Make a SailingLeg object
                 let temp_sailing_leg: SailingLeg = SailingLeg {
                     p1: string_to_point(format!("{},{}", start_lat, start_long)),
                     p2: string_to_point(format!("{},{}", end_lat, end_long)),
                     tacking_width: tacking_width.parse::<f64>().expect("Invalid tacking width"),
+                    min_proximity: min_prox.parse::<f64>().expect("Invalid minimum proximity"),
                 };
 
                 // Add the SailingLeg object to the route plan

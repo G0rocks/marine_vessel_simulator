@@ -507,8 +507,13 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Init waypoints
     let mut last_waypoint: geo::Point;
     let mut next_waypoint: geo::Point;
+    let mut dist_to_next_waypoint: f64;
     // The angle (from north) from last to next waypoint
     let mut course: f64;
+    // Init heading_adjustment to account for ocean_current
+    let mut heading_adjustment: f64 = 0.0;
+    // The minimum proximity to the next waypoint to consider the boat "at the waypotin"
+    let mut min_proximity: f64;
     // Init bearing and other variables used in loop
     let mut bearing_to_next_waypoint: f64;
     let mut new_location: geo::Point;   // Init
@@ -516,10 +521,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // TODO: Add number of tacks?
 
     // Loop through each time step
-    let mut iterations: usize = 0;
-    while iterations <= simulation.max_iterations {
-        iterations += 1;
+    let mut iteration: usize = 0;
+    while iteration <= simulation.max_iterations {
+        // Increment number of iterations
+        iteration += 1;
         // Simulate the boat moving towards the next waypoint
+        // Get working time step
         let working_time_step = match temp_time_step {
             // If temp_time_step is set, use it
             Some(t) => t,
@@ -529,22 +536,59 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Reset temp_time_step
         temp_time_step = None;
 
-        // Get last and next waypoint
+        // Get last and next waypoint from routeplan
         last_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1;
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
-        course = Rhumb.bearing(last_waypoint, next_waypoint);
-        // Get tacking width from route plan
-        let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
+        // Get minimum proximity [m] to next waypoint from route plan
+        min_proximity = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].min_proximity;
 
         // Print for debug
-        println!("Current location: {:?}", boat.location.unwrap());
-        println!("Trying to go to: {:?}", next_waypoint);
-        println!("Distance to there: {:.3} km", Haversine.distance(boat.location.unwrap(), next_waypoint)/1000.0);
+        // println!("Distance to last waypoint: {:.3} km", Haversine.distance(boat.location.unwrap(), last_waypoint)/1000.0);
+        // println!("Distance to next waypoint: {:.3} km", Haversine.distance(boat.location.unwrap(), next_waypoint)/1000.0);
 
         // Get boat current time and location
         let boat_time_now: UtcDateTime = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
+
+        // Pick next waypoint
+        // Get next waypoint
+        next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
+
+        // Get distance to next waypoint from current location
+        dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
+
+        // if distance to the next waypoint is shorter than the simulation minimum proximity (or we are at the next waypoint)
+        // Then we are at the next waypoint. Check if this is the final waypoint (if so, finish simulation) or go to next leg and continue simulation
+        if (dist_to_next_waypoint < min_proximity) || (boat.location.unwrap() == next_waypoint) {
+            println!("WITHIN MINIMUM PROXIMITY");
+            // If the boat has reached the last waypoint, stop the simulation
+            if next_waypoint == coordinates_final {
+                // Stop the simulation
+                return Ok("Simulation completed".to_string());
+            }
+
+            // Update current leg number
+            boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+        
+            // Since leg number increased, update progress bar if a progress bar is in use
+            if !(simulation.progress_bar.is_none()) {
+                // If leg number increased, update progress bar
+                simulation.progress_bar.as_ref().unwrap().inc(1);
+                // If not interactive terminal, print progressbar manually
+                if is_interactive_terminal == false {
+                    let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+                println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
+                }
+            }   // End if
+        }   // End if
+
+        // Get last and next waypoint from routeplan
+        last_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1;
+        next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
+        course = Rhumb.bearing(last_waypoint, next_waypoint);
+        // Get tacking width from route plan
+        let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
         // Get wind data from Copernicus
         let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
@@ -591,6 +635,18 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             relative_wind_angle
         };
 
+        // TODO: if we have the data in the ship logs, adjust heading based on last track_angle and heading difference
+        // if boat.ship_log.last().is_some() {
+        //     if boat.ship_log.last().unwrap().track_angle.is_some() && boat.ship_log.last().unwrap().heading.is_some() {
+        //         heading_adjustment = boat.ship_log.last().unwrap().track_angle.unwrap() - boat.ship_log.last().unwrap().heading.unwrap();
+        //     }
+        // }
+        // else {
+        //     heading_adjustment = 0.0;
+        // }
+
+        // println!("Heading adjustment: {:.4}", heading_adjustment);
+
         // If absolute relative wind angle is smaller than minimum angle of attack, then use tacking method
         if relative_wind_angle.abs() < boat.min_angle_of_attack.unwrap() {
             boat.hold_tack(wind.angle);
@@ -598,6 +654,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         else {
             // Set heading to the bearing to next waypoint
             boat.heading = Some(bearing_to_next_waypoint);
+            // boat.heading = Some(bearing_to_next_waypoint + heading_adjustment);
         }
 
         // TODO: use weather data to compute boats actual velocity
@@ -621,7 +678,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // TODO: implement properly
-        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
+        // working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
+        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
@@ -631,134 +689,70 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         //TODO make sure all forces are correct
 
 
-        // Get distance traveled in time step
-        travel_dist = working_velocity.magnitude * working_time_step; // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times        
+        // Get distance traveled [m] in time step [s]
+        travel_dist = working_velocity.magnitude * working_time_step;
 
-        // Get next waypoint
-        next_waypoint = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+        // Move boat forwards along actual direction and log to ship_log
+        // If distance traveled is greater than the distance to the next waypoint, set travel_dist to dist_to_next_waypoint and change temp_time_step
+        if travel_dist > dist_to_next_waypoint {
+            // Set travel distance [m] as distance to next waypoint
+            travel_dist = dist_to_next_waypoint;
 
-        // Get distance to next waypoint from current location
-        let dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
-
-        // if distance traveled is greater than the distance to the next waypoint and the heading is the bearing to the next waypoint, move to next waypoint, update current leg number and go to next while loop iteration
-        if travel_dist > dist_to_next_waypoint && working_velocity.angle == bearing_to_next_waypoint {
-            // Move to next waypoint
-            boat.location = Some(next_waypoint);
-
-            // Set temp_time_step to time left in simulation time_step after moving to (now current) waypoint
+            // Set temp_time_step [s] to time left in simulation time_step after moving to (now current) waypoint
             let time_passed = dist_to_next_waypoint / working_velocity.magnitude;
             temp_time_step = Some(working_time_step - time_passed);
+        }
 
-            // Add ship log entry at new location
-            let new_log_entry: ShipLogEntry = ShipLogEntry {
-                // Set timestamp to last shiplogentry + time step
-                timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(time_passed)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                coordinates_initial: coordinates_initial,
-                coordinates_current: boat.location.unwrap(),
-                coordinates_final: coordinates_final,
-                cargo_on_board: Some(boat.cargo_current),
-                velocity: Some(working_velocity),
-                course: Some(course),
-                heading: boat.heading,
-                track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
-                true_bearing: None,
-                draught: None,
-                navigation_status: Some(NavigationStatus::UnderwaySailing),
+        // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint, important to use unit [meter] for travel_dist
+        new_location = Haversine.destination(boat.location.unwrap(), working_velocity.angle, travel_dist);
+        // If new location is further away from leg line than half of tacking width, tack before moving
+        let current_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, boat.location.unwrap());
+        let new_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, new_location);
+
+        // If currently inside or on boundary but heading out of boundary, tack
+        if ((tacking_width/2.0) <  new_loc_min_dist_to_leg_line) && (current_loc_min_dist_to_leg_line <= tacking_width/2.0) {
+            // Move to edge of tacking width, tack and go to next iteration of while loop
+            // Minimum distance to tacking edge from current location
+            let dist_to_tacking_edge = (tacking_width/2.0) - current_loc_min_dist_to_leg_line;
+            // Minimum distance from current location to new location
+            let dist_to_new_location = new_loc_min_dist_to_leg_line - current_loc_min_dist_to_leg_line;
+
+            // Distance to tacking edge along current heading, see issue #21 for details https://github.com/G0rocks/marine_vessel_simulator/issues/21
+            travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location);
+
+            // Update location
+            new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
+
+            // Tack
+            boat.tack(wind.angle);
+
+            // Set temp_time_step [s] to time left in simulation time_step after moving to tacking edge
+            let time_passed = travel_dist / working_velocity.magnitude;
+            temp_time_step = Some(working_time_step - time_passed);
+        }
+
+        // Update the location of the boat
+        boat.location = Some(new_location);
+
+        // Log the new location to the ship log
+        let new_log_entry: ShipLogEntry = ShipLogEntry {
+            timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(working_time_step)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
+            coordinates_initial: coordinates_initial,
+            coordinates_current: boat.location.unwrap(),
+            coordinates_final: coordinates_final,
+            cargo_on_board: Some(boat.cargo_current),
+            velocity: Some(working_velocity),
+            course: Some(course),
+            track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
+            heading: boat.heading,
+            true_bearing: None,
+            draught: None,
+            navigation_status: Some(NavigationStatus::UnderwaySailing),
             };
 
-            // Push the new log entry to the ship log
-            boat.ship_log.push(new_log_entry);
-
-            // If the boat has reached the last waypoint, stop the simulation
-            if boat.location.unwrap() == coordinates_final {
-
-                // Stop the simulation
-                return Ok("Simulation completed".to_string());
-            }
-
-            // Update current leg number
-            boat.current_leg = Some(boat.current_leg.unwrap() + 1);
-            // Since leg number increased, update progress bar if a progress bar is in use
-            if !(simulation.progress_bar.is_none()) {
-            // If leg number increased, update progress bar
-            simulation.progress_bar.as_ref().unwrap().inc(1);
-            // If not interactive terminal, print progressbar manually
-            if is_interactive_terminal == false {
-                let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
-            println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
-            }
-        }
-
-        }
-        // Otherwise, move boat forwards along heading and log to ship_log
-        else {
-            // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint, important to use unit [meter] for travel_dist
-            new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
-            // If new location is further away from leg line than half of tacking width, tack before moving
-            let new_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, new_location);
-            let current_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, boat.location.unwrap());
-
-            // If heading is bearing, stay on track
-            if boat.heading.unwrap() == bearing_to_next_waypoint {
-                // Move to new location
-                boat.location = Some(new_location);
-            }
-            // If currently at least half of tacking width away from leg line, but new location is closer than current location, do not tack
-            else if (current_loc_min_dist_to_leg_line >= tacking_width/2.0) && (new_loc_min_dist_to_leg_line < current_loc_min_dist_to_leg_line) {
-                // Move to new location
-                boat.location = Some(new_location);
-            }
-            // If currently inside boundary but heading out of boundary, tack
-            else if ((tacking_width/2.0) <  new_loc_min_dist_to_leg_line) && (current_loc_min_dist_to_leg_line <= tacking_width/2.0) {
-                // Move to edge of tacking width, tack and go to next iteration of while loop
-                // Minimum distance to tacking edge from current location
-                let dist_to_tacking_edge = (tacking_width/2.0) - current_loc_min_dist_to_leg_line;
-                // Minimum distance from current location to new location
-                let dist_to_new_location = new_loc_min_dist_to_leg_line - current_loc_min_dist_to_leg_line;
-
-                // Distance to tacking edge along current heading, see issue #21 for details https://github.com/G0rocks/marine_vessel_simulator/issues/21
-                travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location);
-
-                // Update location
-                new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
-
-                // Tack
-                boat.tack(wind.angle);
-
-                // Set temp_time_step to time left in simulation time_step after moving to tacking edge
-                let time_passed = travel_dist / working_velocity.magnitude;
-                temp_time_step = Some(working_time_step - time_passed);
-            }
-            // Default case, if all else fails, stay course
-            else {
-                // Move to new location
-                boat.location = Some(new_location);
-            }
-
-
-            // Update the location of the boat
-            boat.location = Some(new_location);
-
-            // Log the new location to the ship log
-            let new_log_entry: ShipLogEntry = ShipLogEntry {
-                timestamp: boat.ship_log.last().unwrap().timestamp.checked_add(time::Duration::seconds_f64(working_time_step)).expect("Could not add time::Duration to time::UtcDateTime. Maybe an overflow occurred?"),
-                coordinates_initial: coordinates_initial,
-                coordinates_current: boat.location.unwrap(),
-                coordinates_final: coordinates_final,
-                cargo_on_board: Some(boat.cargo_current),
-                velocity: Some(working_velocity),
-                course: Some(course),
-                track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
-                heading: boat.heading,
-                true_bearing: None,
-                draught: None,
-                navigation_status: Some(NavigationStatus::UnderwaySailing),
-                };
-
-            // Push the new log entry to the ship log
-            boat.ship_log.push(new_log_entry);
-        }   // End else
-    } // End for loop
+        // Push the new log entry to the ship log
+        boat.ship_log.push(new_log_entry);
+    } // End while loop
 
     // Simulation ran through all the iterations, return ship log and error that the simulation did not finish
     // Return the ship log TODO: Move inside for loop

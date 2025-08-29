@@ -16,6 +16,8 @@ pub struct SailingLeg {
     pub p2: geo::Point,
     /// Tacking width in [m]
     pub tacking_width: f64,
+    /// The minimum proximity in [m] to p2 to consider the vessel "at p2"
+    pub min_proximity: f64
 }
 
 /// Struct to hold ship long entry
