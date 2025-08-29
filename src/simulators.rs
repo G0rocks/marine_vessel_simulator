@@ -561,7 +561,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // if distance to the next waypoint is shorter than the simulation minimum proximity (or we are at the next waypoint)
         // Then we are at the next waypoint. Check if this is the final waypoint (if so, finish simulation) or go to next leg and continue simulation
         if (dist_to_next_waypoint < min_proximity) || (boat.location.unwrap() == next_waypoint) {
-            println!("WITHIN MINIMUM PROXIMITY");
             // If the boat has reached the last waypoint, stop the simulation
             if next_waypoint == coordinates_final {
                 // Stop the simulation
@@ -587,6 +586,9 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         last_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1;
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
         course = Rhumb.bearing(last_waypoint, next_waypoint);
+        // Recalculate distance to next waypoint from current location in case we just reached a waypoint and are going to the next one
+        dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
+
         // Get tacking width from route plan
         let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
