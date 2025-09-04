@@ -708,8 +708,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint, important to use unit [meter] for travel_dist
         new_location = Haversine.destination(boat.location.unwrap(), working_velocity.angle, travel_dist);
         // If new location is further away from leg line than half of tacking width, tack before moving
-        let current_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, boat.location.unwrap());
-        let new_loc_min_dist_to_leg_line = min_haversine_distance(last_waypoint, next_waypoint, new_location);
+        let current_loc_min_dist_to_leg_line = get_min_point_to_great_circle_dist(last_waypoint, next_waypoint, boat.location.unwrap());
+        let new_loc_min_dist_to_leg_line = get_min_point_to_great_circle_dist(last_waypoint, next_waypoint, new_location);
 
         // If currently inside or on boundary but heading out of boundary, tack
         if ((tacking_width/2.0) <  new_loc_min_dist_to_leg_line) && (current_loc_min_dist_to_leg_line <= tacking_width/2.0) {

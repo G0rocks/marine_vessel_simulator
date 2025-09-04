@@ -11,7 +11,7 @@ use csv;    use geo::InterpolatePoint;
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Rhumb, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
-use std::{io, fmt}; // To use errors and for formatting
+use std::{io, fmt, f64::consts}; // To use errors and for formatting
 // use plotters; // Plotters for visualizing data on a map. Uses only rust, no javascript. Will probably be removed in favor of plotly
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
@@ -752,92 +752,28 @@ pub fn haversine_distance_uom_units(p1: geo::Point, p2: geo::Point) -> uom::si::
     return dist;
 }
 
-/// Get shortest distance between line and point
+/// Get shortest distance between a line and a point on a sphere
 /// The line is the haversine line with endpoints p1 and p2
 /// Point p3 is the point that the shortest distance to the line between p1 and p2 will be calculated from.
-/// The distance is calculated by the bisection method
+/// The distance is calculated with the spherical law of sines
 /// Returns the distance in meters
-pub fn min_haversine_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> f64 {
-    // Quick check if already at end points, note: if removed this causes a bug at the end points
-    if (p1 == p3) || (p2 == p3) {
+pub fn get_min_point_to_great_circle_dist(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> f64 {
+    // Quick check if already at end points
+    if p1 == p3 || p2 == p3 {
         return 0.0;
     }
+    // Using analytical solution from https://www.reddit.com/r/askmath/comments/1n6kc8d/whats_the_shortest_distance_d_from_a_point_on_a/
+    // Where p1 is U, P2 is V and P3 is W.
+    // Radius of sphere (Earth) is r
+    let r = geo::Haversine.radius();
+    // b is the distance from U to W (from p1 to p3)
+    let b = geo::Haversine.distance(p1, p3);
+    // Get the angle VUW (the angle between p2 and p3 as seen from p1)
+    let c_angle_radians = (geo::Haversine.bearing(p1, p2) - geo::Haversine.bearing(p1, p3)).abs() * consts::PI/180.0;
 
-    // Initial ratios
-    let mut a = 0.0;
-    let mut b = 1.0;
-    let mut c: f64;
-
-    // End conditions
-    let tolerance = 1.0;    // 1 meter
-    let max_loops = 150;
-    let mut n = 0;
-
-    // Init points
-    let mut a_point: geo::Point;
-    let mut b_point: geo::Point;
-    let mut c_point = p3;   // Initialized to p3 just in case
-    // Init dist variables
-    let mut a_dist: f64;
-    let mut b_dist: f64;
-    let mut c_dist: f64;
-
-    // Attempt bisecting for max_loops
-    while n <= max_loops {
-        // Find c, the midpoint between a and b
-        c = (a+b)/2.0;
-
-        // make h a 1000 times smaller than the space between a and b
-        let h = (b-a)/10000.0;
-
-        // find f'(a), f'(b) and f'(c)
-        a_point = Haversine.point_at_ratio_between(p1, p2, a);
-        b_point = Haversine.point_at_ratio_between(p1, p2, b);
-        c_point = Haversine.point_at_ratio_between(p1, p2, c);
-        let a_h_point = Haversine.point_at_ratio_between(p1, p2, a+h);
-        let c_h_point = Haversine.point_at_ratio_between(p1, p2, c+h);
-        a_dist = Haversine.distance(a_point, p3);
-        b_dist = Haversine.distance(b_point, p3);
-        c_dist = Haversine.distance(c_point, p3);
-        let a_h_dist = Haversine.distance(a_h_point, p3);
-        let c_h_dist = Haversine.distance(c_h_point, p3);
-
-        let a_derivative = (a_h_dist - a_dist) / h;
-        let c_derivative = (c_h_dist - c_dist) / h;
-
-        // If distance is zero or difference in a_dist and b_dist is smaller than tolerance, return c_dist
-        if c_dist < tolerance || (a_dist - b_dist).abs() / 2.0 < tolerance {
-            return Haversine.distance(c_point, p3);
-        }
-
-        // If root between a and c, move b to c
-        if a_derivative*c_derivative < 0.0 {
-            b = c;
-        }
-        else {
-            a = c;
-        }
-        n += 1;
-    }
-
-    // Get and return the distance between the point and the line
-    return Haversine.distance(c_point, p3);
-}
-
-/// Get shortest distance between line and point
-/// The distance is calculated using an orthogonal projection of p3 onto the line p1-p2 and then calculating the haversine distance between p3 and the point of orthogonal projection
-/// The line is made up of the points p1 and p2
-/// Point p3 is the line that the shortest distance will be calculated from.
-pub fn min_orthogonal_projection_distance(p1: geo::Point, p2: geo::Point, p3: geo::Point) -> uom::si::f64::Length {
-    // Find z in orthogonal projection of p3 onto the line p1-p2
-    let u: geo::Point = p2 - p1; // Vector from p1 to p2
-    let y: geo::Point = p3 - p1; // Vector from p1 to p3
-    let u_to_y_hat_multiplier: f64 = (y.x()*u.x() + y.y()*u.y()) / (u.x()*u.x() + u.y()*u.y());
-    let y_hat = geo::Point::new(u.x() * u_to_y_hat_multiplier, u.y() * u_to_y_hat_multiplier); // Orthogonal projection of y onto u
-    let z: geo::Point = y - y_hat; // Point of orthogonal projection
-    
-    // Get and return the distance between the point and the line
-    return haversine_distance_uom_units(geo::Point::new(0.0, 0.0), z);
+    // Calculate distance based on spherical law of sines https://en.wikipedia.org/wiki/Law_of_sines#Spherical_law_of_sines
+    let d = r*(c_angle_radians.sin() * (b/r).sin()).asin();
+    return d;
 }
 
 /// Converts a string into a uom::si::f64::Mass object
@@ -860,7 +796,6 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
     let return_cargo: Option<uom::si::f64::Mass> = Some(uom::si::f64::Mass::new::<uom::si::mass::ton>(cargo));
     return return_cargo;
 }
-
 
 /// Returns the average and standard deviation of a vector of uom::si::f64::Velocity objects
 /// speed_vec: The vector of uom::si::f64::Velocity objects
@@ -954,7 +889,6 @@ pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
     return Ok((Some(weight_mean), Some(weight_std)));
 }
 
-
 /// Returns the average and standard deviation of a vector
 /// # Example:
 /// `let (my_mean, my_std) = get_time_mean_and_std(&my_vec);`
@@ -992,8 +926,6 @@ pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
     return Ok((duration_mean, duration_std));
 }
 
-
-
 /// Returns the average and standard deviation of a vector of uom::si::f64::Length objects
 /// dist_vec: The vector of uom::si::f64::Length objects
 /// # Example:
@@ -1029,7 +961,6 @@ pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> Result
     // Return the mean and standard deviation
     return Ok((mean, std));
 }
-
 
 /// Loads route plan from a CSV file
 /// Returns a vector of SailingLeg objects where each entry is a a leg of the trip
@@ -1087,7 +1018,6 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
     // Return the route plan
     return route_plan;
 }
-
 
 /// Function that writes the ship logs to a CSV file with the following columns:
 /// timestamp;coordinates_initial;coordinates_current;coordinates_final;cargo_on_board
@@ -1199,8 +1129,6 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
     Ok(())
 }
 
-
-
 /// Function that translates coordinates to x,y values between 0 and 1 for plotting
 pub fn geo_point_to_xy(point_in: geo::Point) -> (f32, f32) {
     // Normalize latitude to 0..1 where 0.5 is equator
@@ -1211,7 +1139,6 @@ pub fn geo_point_to_xy(point_in: geo::Point) -> (f32, f32) {
     // Return the coordinates as a tuple
     return (x as f32, y as f32);
 }
-
 
 /// Function that gets the angle from north given the northward PhysVec property (effectively, the magnitude going from north to south) and eastward PhysVec property (effectively, the magnitude going from west to east)
 pub fn get_north_angle_from_northward_and_eastward_property(eastward: f64, northward: f64) -> f64 {
@@ -1230,60 +1157,90 @@ pub fn get_north_angle_from_northward_and_eastward_property(eastward: f64, north
     return north_angle;
 }
 
-
-
-
-
-
 // Set up tests here
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // Test min_haversine_distance function
+    // Test get_min_point_to_great_circle_dist function
     #[test]
-    fn min_haversine_distance_test() {
-        println!("Testing min_haversine_distance function...");
+    fn get_min_point_to_great_circle_dist_test() {
+        let tolerance = 1.0;
+        println!("Testing get_min_point_to_great_circle_dist function...");
+        println!("Tolerance: {} meter", tolerance);
         println!("Earth radius: {} meters", geo::Haversine.radius());
-        // First test short distance on both sides
+        // First test short distance on both sides of equator and close to both end points
         let lon1 = 0.0;
         let lat1 = 0.0;
-        let lon2 = 100.0;
+        let lon2 = 10.0;
         let lat2 = 0.0;
-        let lon3 = 50.0;
+        let lon3 = 10.0;
         let lat3 = 10.0;
         let lon4 = 50.0;
         let lat4 = -10.0;
+        let lon5 = 0.0;
+        let lat5 = 0.000001;
+        let lon6 = 10.0;
+        let lat6 = 0.000001;
         let p1 = geo::Point::new(lon1, lat1);
         let p2 = geo::Point::new(lon2, lat2);
         let p3 = geo::Point::new(lon3, lat3);
         let p4 = geo::Point::new(lon4, lat4);
-        let correct_dist = geo::Haversine.radius() * (lat3*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
-        let dist = min_haversine_distance(p1, p2, p3);
-        assert_eq!(dist/1000.0, correct_dist);
-        let dist = min_haversine_distance(p1, p2, p4);
-        assert_eq!(dist/1000.0, correct_dist);
-
-        // Then test long distance across angle on both sides
+        let p5 = geo::Point::new(lon5, lat5);
+        let p6 = geo::Point::new(lon6, lat6);
+        let correct_dist = geo::Haversine.radius() * (lat3*2.0*std::f64::consts::PI/360.0); // 1111.950802335329128468111081452 kilometers
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p3);
+        // Assert if dist is closer than the tolerance to the correct_dist
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p4);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        let correct_dist = geo::Haversine.radius() * (lat5*2.0*std::f64::consts::PI/360.0); // 1111.950802335329128468111081452 kilometers
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p5);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p6);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        
+        // Then test long distance from prime meridian
         let lon1 = 0.0;
-        let lat1 = 0.0;
-        let lon2 = 50.0;
-        let lat2 = 45.0;
+        let lat1 = 89.0;
+        let lon2 = 0.0;
+        let lat2 = -89.0;
         let lon3 = 0.0;
-        let lat3 = 90.0;
-        let lon4 = 100.0;
+        let lat3 = 0.0;
+        let lon4 = -50.0;
         let lat4 = 0.0;
+        let lon5 = 0.0;
+        let lat5 = 89.000001;
+        let lon6 = 0.0;
+        let lat6 = -89.000001;
         let p1 = geo::Point::new(lon1, lat1);
         let p2 = geo::Point::new(lon2, lat2);
         let p3 = geo::Point::new(lon3, lat3);
         let p4 = geo::Point::new(lon4, lat4);
-        let angle = 45.0;
-        let correct_dist = geo::Haversine.radius() * (angle*2.0*std::f64::consts::PI/360.0)/1000.0; // 1111.950802335329128468111081452 kilometers
-        let dist = min_haversine_distance(p1, p2, p3);
-        assert_eq!(dist/1000.0, correct_dist);
-        // let angle = ;
-        let correct_dist = 6949.25;
-        let dist = min_haversine_distance(p1, p2, p4);
-        assert_eq!(dist/1000.0, correct_dist);
+        let p5 = geo::Point::new(lon5, lat5);
+        let p6 = geo::Point::new(lon6, lat6);
+        // Assert if dist is closer than the tolerance to the correct_dist
+        let correct_dist = 0.0;
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p3);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        // Assert if dist is closer than the tolerance to the correct_dist
+        let correct_dist = geo::Haversine.radius() * (lon4*2.0*std::f64::consts::PI/360.0).abs();
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p4);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+
+        let correct_dist = geo::Haversine.radius() * ((lat5-lat1)*2.0*std::f64::consts::PI/360.0).abs();
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p5);
+        // Assert if dist is closer than the tolerance to the correct_dist
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        let correct_dist = geo::Haversine.radius() * ((lat6-lat2)*2.0*std::f64::consts::PI/360.0).abs();
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p6);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        
+        // Test for edge cases where p1 or p2 and p3 are the same
+        let correct_dist = 0.0;
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p1);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0);
+        let dist = get_min_point_to_great_circle_dist(p1, p2, p2);
+        assert_eq!((correct_dist-dist).abs() <= tolerance, true, "Correct distance: {:.2} km, calculated distance: {:.2} km", correct_dist/1000.0, dist/1000.0); 
     }
 }
