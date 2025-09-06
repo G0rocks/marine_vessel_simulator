@@ -824,6 +824,8 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
 
     // Add initial point info to ship logs
     boat.location = Some(segment_points[0]);
+    boat.destination = segment_points.last().copied();
+    boat.navigation_status = Some(NavigationStatus::UnderwaySailing);
     boat.current_leg = Some(1);
     boat.time_now = start_time;
     boat.log_entry_into_ship_log();
@@ -831,7 +833,7 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
 
     // Calculate how much time it would take to travel between each point using the weather data, minimum angle of attack etc.
     // Loop through each point
-    for i in 0..segment_points.len() {
+    for i in 1..segment_points.len() {
         // Check the bearing, distance and conditions from current point to next point
         boat.heading = Some(geo::Haversine.bearing(boat.location.unwrap(), segment_points[i]));
         boat.true_bearing = Some(geo::Haversine.bearing(boat.location.unwrap(), segment_points[i]));
