@@ -768,11 +768,14 @@ pub fn get_min_point_to_great_circle_dist(p1: geo::Point, p2: geo::Point, p3: ge
     let r = geo::Haversine.radius();
     // b is the distance from U to W (from p1 to p3)
     let b = geo::Haversine.distance(p1, p3);
-    // Get the angle VUW (the angle between p2 and p3 as seen from p1)
+    // Get the angle VUW (the angle between p2 and p3 as seen from p1), c_angle_radians is in [0, 2PI]
     let c_angle_radians = (geo::Haversine.bearing(p1, p2) - geo::Haversine.bearing(p1, p3)).abs() * consts::PI/180.0;
 
     // Calculate distance based on spherical law of sines https://en.wikipedia.org/wiki/Law_of_sines#Spherical_law_of_sines
-    let d = r*(c_angle_radians.sin() * (b/r).sin()).asin();
+    // Note b/r gives an angle in radians that should always be in [0, PI] meaning that (b/r).sin() is always zero or a positive number and
+    // c_angle_radians.sin() can be a number in [-1,1] so we could be taking the arcsin of a negative number which results in a negative number
+    // Since the distance is always the same, regardless of the sign, we take the absolute value
+    let d = r*(c_angle_radians.sin() * (b/r).sin()).asin().abs();
     return d;
 }
 
