@@ -35,9 +35,10 @@ pub struct ShipLogEntry {
     pub heading: Option<f64>,  // Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub track_angle: Option<f64>,   // The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°
     pub true_bearing: Option<f64>,  // True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
-    pub draught: Option<uom::si::f64::Length>,  // Draught of the boat at the time of the log entry
+    pub draft: Option<uom::si::f64::Length>,  // draft of the boat at the time of the log entry
     pub navigation_status: Option<NavigationStatus>,  // Navigation status of the boat at the time of the log entry
 }
+
 /// Navigational status of the vessel based on the AIS navigation status codes
 /// See: https://support.marinetraffic.com/en/articles/9552867-what-is-the-significance-of-the-ais-navigational-status-values
 #[derive(Debug, Copy, Clone)]
@@ -47,7 +48,7 @@ pub struct ShipLogEntry {
     AtAnchor                    = 1,
     NotUnderCommand             = 2,
     RestrictedManeuverability   = 3,
-    ConstrainedByDraught        = 4,
+    ConstrainedByDraft          = 4,
     Moored                      = 5,
     Aground                     = 6,
     EngagedInFishing            = 7,

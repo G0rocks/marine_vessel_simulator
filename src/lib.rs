@@ -1100,7 +1100,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
         };
 
         // If draught is None, set to empty string
-        let draught = match entry.draught {
+        let draft = match entry.draft {
             Some(d) => d.get::<uom::si::length::meter>().to_string(),
             None => String::from(""),
         };
@@ -1122,7 +1122,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
             course,
             heading,
             true_bearing,
-            draught,
+            draft,
             navigation_status,
         ])?;
     }

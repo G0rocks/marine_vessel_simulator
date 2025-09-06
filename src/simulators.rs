@@ -200,7 +200,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
         heading: None,
         track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
         true_bearing: None,
-        draught: None,
+        draft: None,
         navigation_status: None,
     };
     // Push first ship log entry
@@ -241,7 +241,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                         heading: boat.heading,
                         track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                         true_bearing: None,
-                        draught: None,
+                        draft: None,
                         navigation_status: None,
                     };
 
@@ -280,7 +280,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                     heading: boat.heading,
                     track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                     true_bearing: None,
-                    draught: None,
+                    draft: None,
                     navigation_status: None,
                     };
 
@@ -334,7 +334,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
         heading: None,
         track_angle: None,
         true_bearing: None,
-        draught: None,
+        draft: None,
         navigation_status: None,
     };
     // Push first ship log entry
@@ -377,7 +377,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                         heading: boat.heading,
                         track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                         true_bearing: None,
-                        draught: None,
+                        draft: None,
                         navigation_status: None,
                     };
 
@@ -416,7 +416,7 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
                     heading: boat.heading,
                     track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
                     true_bearing: None,
-                    draught: None,
+                    draft: None,
                     navigation_status: None,
                     };
 
@@ -494,7 +494,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         heading: None,  // Note perhaps we can change this to be better, in the future
         track_angle: None,  // First point, can't get the angle from the last point since there is no last point
         true_bearing: None,
-        draught: None,
+        draft: None,
         navigation_status: Some(NavigationStatus::UnderwaySailing),
     };
     // Push first ship log entry
@@ -748,7 +748,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
             heading: boat.heading,
             true_bearing: None,
-            draught: None,
+            draft: None,
             navigation_status: Some(NavigationStatus::UnderwaySailing),
             };
 
