@@ -1247,13 +1247,21 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
     // Initialize weather data vectors
     let mut wind_vec: Vec<PhysVec> = Vec::new();
     let mut ocean_current_vec: Vec<PhysVec> = Vec::new();
+    // Get number of points
+    let num_points = points.len();
+
+    // Start a progress bar with twice the tasks as num_points
+    let progress_bar = indicatif::ProgressBar::new((num_points*2) as u64);
+    // Set progress bar style
+    progress_bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
+    // Configure live redraw
+    progress_bar.set_draw_target(indicatif::ProgressDrawTarget::stdout());
+    progress_bar.enable_steady_tick(std::time::Duration::from_millis(500));
+    // Start progress bar
+    progress_bar.inc(0);
 
     // For each point, get the wind and current
-    let num_points = points.len();
     for i in 0..num_points {
-        // Update user
-        println!("{}/{}", i, num_points);
-
         // Get the wind data
         let wind_data = match copernicus.get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), None, None) {
             Ok(w) => w,
@@ -1284,6 +1292,9 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
         let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
         let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
         ocean_current_vec.push(PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle));    // unit [m/s]
+
+        // Update progress bar
+        progress_bar.inc(1);
     }
 
     // Save all the points in a csv file
@@ -1332,10 +1343,16 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
             wind_angle,
             ocean_current_speed,
             ocean_current_angle,])?;
+        
+        // Update progress bar
+        progress_bar.inc(1);
     }
 
     // Flush and close the writer
     wtr.flush()?;
+
+    // Finish progress_bar
+    progress_bar.finish();
 
     // Return ok
     return Ok("weather data retrieved and saved successfully".to_string());
