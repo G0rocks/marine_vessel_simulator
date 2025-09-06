@@ -1234,6 +1234,109 @@ pub fn segment_waypoint_mission(route_plan: Vec<SailingLeg>, n_segments: u64) ->
     return (waypoints, segment_dist);
 }
 
+/// Downloads the weather data needed to run the fast_sim_waypoint_mission_weather_data_from_copernicus
+/// points: the locations to get weather data for
+/// timestamp: the time that the weather happened
+/// path_to_file: where to save the data
+pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTime, path_to_file: String, copernicus: copernicusmarine_rs::Copernicus) -> Result<String, io::Error> {
+    println!("Getting weather data");
+    // Initialize weather data vectors
+    let mut wind_vec: Vec<PhysVec> = Vec::new();
+    let mut ocean_current_vec: Vec<PhysVec> = Vec::new();
+
+    // For each point, get the wind and current
+    let num_points = points.len();
+    for i in 0..num_points {
+        // Update user
+        println!("{}/{}", i, num_points);
+
+        // Get the wind data
+        let wind_data = match copernicus.get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), None, None) {
+            Ok(w) => w,
+            Err(e) => panic!("Error getting wind data from copernicusmarine: {}", e),
+        };
+        let wind_east_data = &wind_data[0];
+        let wind_north_data = &wind_data[1];
+
+        // Wind speed and direction
+        let wind_east: f64 = wind_east_data[0];
+        let wind_north: f64 = wind_north_data[0];
+        let wind_angle: f64 = get_north_angle_from_northward_and_eastward_property(wind_east, wind_north);   // Angle in degrees
+        let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
+        wind_vec.push(PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), wind_angle));    // unit [m/s]
+
+        // Get ocean current data from Copernicus
+        // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
+        let ocean_current_data = match copernicus.get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
+            Ok(o) => o,
+            Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
+        };
+        let ocean_current_east_data = &ocean_current_data[0];
+        let ocean_current_north_data = &ocean_current_data[1];
+
+        // Ocean current speed and direction
+        let ocean_current_east: f64 = ocean_current_east_data[0];
+        let ocean_current_north: f64 = ocean_current_north_data[0];
+        let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
+        let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
+        ocean_current_vec.push(PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle));    // unit [m/s]
+    }
+
+    // Save all the points in a csv file
+    // Check if csv_file_path ends with ".csv"
+    let num_chars = path_to_file.chars().count();
+    if &path_to_file[(num_chars-4)..] != ".csv" {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "The filepath must end with \".csv\""));
+    }
+
+
+    // Check if vectors are the same size
+    if &wind_vec.len() != &ocean_current_vec.len() || wind_vec.len() != num_points {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "All vectors must have the same length"));
+    }
+
+    // Create a CSV writer with a semicolon delimiter
+    let mut wtr = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(path_to_file)?;
+
+    // Write the header
+    wtr.write_record(&["time","longitude","latitude","wind_speed[m/s]","wind_angle[°]","ocean_current_speed[m/s]","ocean_current_angle[°]"])?;
+
+    // Write the ship log entries
+    for i in 0..num_points {
+        // Get longitude
+        let longitude = points[i].x().to_string();
+        // Get latitude
+        let latitude = points[i].y().to_string();
+        // Get wind_speed
+        let wind_speed = wind_vec[i].magnitude.to_string();
+        // Get wind_angle
+        let wind_angle = wind_vec[i].angle.to_string();
+        // Get ocean_current_speed
+        let ocean_current_speed = ocean_current_vec[i].magnitude.to_string();
+        // Get ocean_current_angle
+        let ocean_current_angle = ocean_current_vec[i].angle.to_string();
+
+        // Write the record
+        wtr.write_record(&[
+            copernicusmarine_rs::utc_date_time_to_string(timestamp),
+            longitude,
+            latitude,
+            wind_speed,
+            wind_angle,
+            ocean_current_speed,
+            ocean_current_angle,])?;
+    }
+
+    // Flush and close the writer
+    wtr.flush()?;
+
+    // Return ok
+    return Ok("weather data retrieved and saved successfully".to_string());
+}
+
 
 
 // Set up tests here
