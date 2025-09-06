@@ -1160,6 +1160,82 @@ pub fn get_north_angle_from_northward_and_eastward_property(eastward: f64, north
     return north_angle;
 }
 
+/// Segments a waypoint mission
+pub fn segment_waypoint_mission(route_plan: Vec<SailingLeg>, n_segments: u64) -> (Vec<geo::Point>, f64) {
+    // Get total length of route, in meters, if going shortest path
+    let mut total_dist: f64 = 0.0;
+
+    // For each leg, add leg distance to total_dist
+    for leg in &route_plan {
+        // get leg points
+        let p1 = leg.p1;
+        let p2 = leg.p2;
+        total_dist += geo::Haversine.distance(p1, p2);
+    }
+
+    // Get number of segments with a sanity check against zero n_segments:
+    let n: u64;
+    if n_segments < 1 {
+        n = 1;
+    } else {
+        n = n_segments;
+    }
+
+    // Get length of each segment
+    let segment_dist: f64 = total_dist/(n as f64);
+
+    // Make points of analysis using the path along the waypoint route and the n_segments from the simulaion
+    // Init with first point
+    let mut waypoints: Vec<geo::Point> = vec![route_plan[0].p1];
+
+    // Until the last waypoint has been reached, travel the segment_dist along the path and add the waypoint to the waypoints vector
+    // Init distance left of segment
+    let mut seg_dist_left: f64;
+    // Init leg number
+    let mut current_leg = 0;
+    // Init boat location
+    let mut location = route_plan[0].p1;
+    while waypoints.last().unwrap() != &route_plan.last().unwrap().p2 {
+        // Reset seg_dist_left
+        seg_dist_left = segment_dist.clone();
+
+        // While there is still distance left in seg_dist_left, keep going towards the next point on the leg
+        while seg_dist_left > 0.0 {
+            // Get p2 of the current leg
+            let p2 = route_plan[(current_leg) as usize].p2;
+
+            // Get distance to next waypoint
+            let dist_to_next_waypoint = geo::Haversine.distance(location, p2);
+
+            // If distance to next waypoint is shorter or same as segment distance left, then travel to waypoint, update boat location and leg number and reduce segment distance left
+            if dist_to_next_waypoint <= seg_dist_left {
+                location = p2;
+                current_leg = current_leg + 1;
+
+                seg_dist_left -= dist_to_next_waypoint;
+
+                // If last point, set seg_dist_left to zero
+                if location == route_plan.last().unwrap().p2 {
+                    seg_dist_left = 0.0;
+                }
+            }
+            // Else, travel the segment distance along the path between the last waypoint and the next waypoint, set the seg_dist_left to zero and append that point to waypoints
+            else {
+                let heading = geo::Haversine.bearing(location, p2);
+                location = geo::Haversine.destination(location, heading, seg_dist_left);
+                seg_dist_left = 0.0;
+            }
+        }
+        // Add location
+        waypoints.push(location);
+    }
+
+    // Return waypoints and segment distance
+    return (waypoints, segment_dist);
+}
+
+
+
 // Set up tests here
 #[cfg(test)]
 mod tests {
