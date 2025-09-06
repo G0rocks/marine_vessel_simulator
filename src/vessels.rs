@@ -118,9 +118,14 @@ impl VesselSide {
 /// Struct to hold boat metadata
 /// All fields are optional, so that the struct can be created without knowing all the values
 pub struct Boat {
+    pub cargo_max_capacity: Option<uom::si::f64::Mass>,
+    pub cargo_current: uom::si::f64::Mass,
+    pub cargo_mean: Option<uom::si::f64::Mass>,
+    pub cargo_std: Option<uom::si::f64::Mass>,
     pub imo: Option<u32>,
-    pub name: Option<String>,
     pub min_angle_of_attack: Option<f64>,
+    pub name: Option<String>,
+    pub navigation_status: Option<NavigationStatus>,
     pub location: Option<geo::Point>,
     pub heading: Option<f64>,   /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub sail: Option<Sail>,
@@ -134,22 +139,25 @@ pub struct Boat {
     pub velocity_current: Option<PhysVec>,  /// Current velocity of the boat with magnitude and direction
     pub velocity_mean: Option<uom::si::f64::Velocity>,  /// The average velocity of the boat, only magnitude
     pub velocity_std: Option<uom::si::f64::Velocity>,   /// The standard deviation of the velocity of the boat, only magnitude
-    pub cargo_max_capacity: Option<uom::si::f64::Mass>,
-    pub cargo_current: uom::si::f64::Mass,
-    pub cargo_mean: Option<uom::si::f64::Mass>,
-    pub cargo_std: Option<uom::si::f64::Mass>,
     pub wind_preferred_side: VesselSide,  /// Preferred side of the boat for the wind to hit
     pub hull_drag_coefficient: Option<f64>,  /// Coefficient of drag for the hull
     pub ship_log: Vec<ShipLogEntry>,
+    /// The current time for the boat
+    pub time_now: time::UtcDateTime,
+    /// The true bearing (true as in from north) to the next waypoint
+    pub true_bearing: Option<f64>,
 }
 
 // Implementation of the Boat struct
 //----------------------------------------------------
 impl Boat {
+    /// Creates a new Boat instance with mostly None in the fields, though some fields have default values
+    /// Make sure to set the values you need to use to the correct values 
     pub fn new() -> Boat {
         Boat {
             imo: None,
             name: None,
+            navigation_status: None,
             min_angle_of_attack: None,
             location: None,
             heading: None,
@@ -171,6 +179,8 @@ impl Boat {
             wind_preferred_side: VesselSide::Starboard,  // Default to starboard since then we have the right of way in most cases
             hull_drag_coefficient: None,
             ship_log: Vec::new(),
+            time_now: UtcDateTime::now(),
+            true_bearing: None,
         }
     }
 
