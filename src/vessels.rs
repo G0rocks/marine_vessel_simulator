@@ -231,11 +231,17 @@ impl Boat {
             0 => self.location.expect("Tried to get boats location but no location was found"),
             _ => self.ship_log.last().unwrap().coordinates_initial,
         };
-        // Same with final coordinates
-        let coord_final = match self.ship_log.len() {
-            0 => self.location.expect("Tried to get boats location but no location was found"),
-            _ => self.ship_log.last().unwrap().coordinates_final,
-        };
+        // Same with final coordinates unless the boat has a destination
+        let coord_final: geo::Point;
+        if self.destination.is_some() {
+            coord_final = self.destination.unwrap()
+        }
+        else {
+            coord_final = match self.ship_log.len() {
+                0 => self.location.expect("Tried to get boats location but no location was found"),
+                _ => self.ship_log.last().unwrap().coordinates_final,
+            };
+        }
         // Make the new entry
         let new_log_entry: ShipLogEntry = ShipLogEntry {
             timestamp: self.time_now,

@@ -567,7 +567,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // if distance to the next waypoint is shorter than the simulation minimum proximity (or we are at the next waypoint)
         // Then we are at the next waypoint. Check if this is the final waypoint (if so, finish simulation) or go to next leg and continue simulation
-        if (dist_to_next_waypoint < min_proximity) || (boat.location.unwrap() == next_waypoint) {
+        if (dist_to_next_waypoint <= min_proximity) || (boat.location.unwrap() == next_waypoint) {
             // If the boat has reached the last waypoint, stop the simulation
             if next_waypoint == coordinates_final {
                 // Stop the simulation
@@ -689,8 +689,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // TODO: implement properly
-        // working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
-        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
+        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
+        // working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
@@ -729,13 +729,27 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             let dist_to_new_location = new_loc_min_dist_to_leg_line - current_loc_min_dist_to_leg_line;
 
             // Distance to tacking edge along current heading, see issue #21 for details https://github.com/G0rocks/marine_vessel_simulator/issues/21
-            travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location);
+            // Only go less than 100% of the way so we don't have any issues near the boundary
+            travel_dist = travel_dist * (dist_to_tacking_edge / dist_to_new_location)*0.9;
 
             // Update location
             new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
+            let new_loc_min_dist_to_leg_line = get_min_point_to_great_circle_dist(last_waypoint, next_waypoint, new_location);
 
-            // Tack
-            boat.tack(wind.angle);
+            // Double check that new location is inside/on tacking edge.
+            // Note this is here because of floating point errors in the travel_dist calculation above and can not be removed because of those, unless they are updated to deal with the floating point errors
+            // travel_dist = travel_dist - 2.0*(tacking_width/2.0 - new_loc_min_dist_to_leg_line).abs();
+
+            // Update location
+            // new_location = Haversine.destination(boat.location.unwrap(), boat.heading.unwrap(), travel_dist);
+            // let new_loc_min_dist_to_leg_line = get_min_point_to_great_circle_dist(last_waypoint, next_waypoint, new_location);
+
+            // If distance to tacking edge is less than 10% of tacking width/2 then tack, otherwise keep going
+            let dist_to_tacking_edge = (tacking_width/2.0) - new_loc_min_dist_to_leg_line;
+            if dist_to_tacking_edge <= 0.1*tacking_width/2.0 {
+                // Tack
+                boat.tack(wind.angle);
+            }
 
             // Set temp_time_step [s] to time left in simulation time_step after moving to tacking edge
             let time_passed = travel_dist / working_velocity.magnitude;
