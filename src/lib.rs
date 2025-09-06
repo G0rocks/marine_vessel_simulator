@@ -1077,7 +1077,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
 
         // If velocity is None, set to empty string
         let velocity = match entry.velocity {
-            Some(v) => v.to_string(),
+            Some(v) => v.magnitude.to_string(),
             None => String::from(""),
         };
 
