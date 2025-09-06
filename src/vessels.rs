@@ -215,6 +215,38 @@ impl Boat {
         }
     }
 
+    /// Logs a new entry in the ship log
+    pub fn log_entry_into_ship_log(&mut self) {
+        // If there is a ship log entry already, use the last initial coordinates, otherwise, use boats current location
+        let coord_initial = match self.ship_log.len() {
+            0 => self.location.expect("Tried to get boats location but no location was found"),
+            _ => self.ship_log.last().unwrap().coordinates_initial,
+        };
+        // Same with final coordinates
+        let coord_final = match self.ship_log.len() {
+            0 => self.location.expect("Tried to get boats location but no location was found"),
+            _ => self.ship_log.last().unwrap().coordinates_final,
+        };
+        // Make the new entry
+        let new_log_entry: ShipLogEntry = ShipLogEntry {
+            timestamp: self.time_now,
+            coordinates_initial: coord_initial,
+            coordinates_current: self.location.expect("Tried to get boats location but no location was found"),
+            coordinates_final: coord_final,
+            cargo_on_board: Some(self.cargo_current),
+            velocity: self.velocity_current,
+            course: Some(geo::Haversine.bearing(coord_initial, coord_final)),
+            track_angle: Some(Rhumb.bearing(coord_initial, self.location.unwrap())),
+            heading: self.heading,
+            true_bearing: self.true_bearing,
+            draft: self.draft,
+            navigation_status: self.navigation_status,
+            };
+
+        // Push the new log entry to the ship log
+        self.ship_log.push(new_log_entry);
+    }
+
     /// Loads cargo, makes sure to compare against the maximum cargo capacity of the vessel
     pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
         // Check if the cargo is too heavy
@@ -235,3 +267,22 @@ impl Boat {
 
 
 
+// Implementation of the ShipLogEntry struct
+//----------------------------------------------------
+impl ShipLogEntry {
+    pub fn new(timestamp: UtcDateTime, coord_initial: geo::Point, coord_current: geo::Point, coord_final: geo::Point, cargo: Option<uom::si::f64::Mass>, velocity: Option<PhysVec>, course: Option<f64>, heading: Option<f64>, track_angle: Option<f64>, true_bearing: Option<f64>, draft: Option<uom::si::f64::Length>, navigation_status: Option<NavigationStatus>) -> ShipLogEntry {
+        ShipLogEntry {
+            timestamp: timestamp,
+            coordinates_initial: coord_initial,
+            coordinates_current: coord_current,
+            coordinates_final: coord_final,
+            cargo_on_board: cargo,
+            velocity: velocity,
+            course: course,
+            heading: heading,
+            track_angle: track_angle,
+            true_bearing: true_bearing,
+            draft: draft,
+            navigation_status: navigation_status}
+    }
+}
