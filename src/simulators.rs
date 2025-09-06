@@ -527,7 +527,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // The angle (from north) from last to next waypoint
     let mut course: f64;
     // Init heading_adjustment to account for ocean_current
-    let mut heading_adjustment: f64 = 0.0;
+    let heading_adjustment: f64 = 0.0;
     // The minimum proximity to the next waypoint to consider the boat "at the waypotin"
     let mut min_proximity: f64;
     // Init bearing and other variables used in loop
@@ -552,24 +552,15 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Reset temp_time_step
         temp_time_step = None;
 
-        // Get last and next waypoint from routeplan
-        last_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p1;
+        // Get next waypoint from routeplan
         next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
         // Get minimum proximity [m] to next waypoint from route plan
         min_proximity = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].min_proximity;
-
-        // Print for debug
-        // println!("Distance to last waypoint: {:.3} km", Haversine.distance(boat.location.unwrap(), last_waypoint)/1000.0);
-        // println!("Distance to next waypoint: {:.3} km", Haversine.distance(boat.location.unwrap(), next_waypoint)/1000.0);
 
         // Get boat current time and location
         let boat_time_now: UtcDateTime = boat.ship_log.last().unwrap().timestamp;
         let longitude: f64 = boat.location.expect("Boat has no location").x();
         let latitude: f64 = boat.location.expect("Boat has no location").y();
-
-        // Pick next waypoint
-        // Get next waypoint
-        next_waypoint = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2;
 
         // Get distance to next waypoint from current location
         dist_to_next_waypoint = Haversine.distance(boat.location.unwrap(), next_waypoint);
@@ -674,6 +665,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             boat.heading = Some(bearing_to_next_waypoint);
             // boat.heading = Some(bearing_to_next_waypoint + heading_adjustment);
         }
+        // adjust heading
+        boat.heading = Some(boat.heading.unwrap() + heading_adjustment);
 
         // TODO: use weather data to compute boats actual velocity
         // Find total force on boat
