@@ -206,14 +206,22 @@ impl Boat {
             self.wind_preferred_side = VesselSide::Starboard; // Default to starboard since then we have the right of way in most cases
             self.heading = Some(wind_angle - self.min_angle_of_attack.unwrap());
         }
+        // Make sure the heading is in between [0, 360]
+        while self.heading.unwrap() < 0.0 {
+            self.heading = Some(self.heading.unwrap() + 360.0);
+        }
+        while self.heading.unwrap() > 360.0 {
+            self.heading = Some(self.heading.unwrap() - 360.0);
+        }
     }
 
-
+    /// Loads cargo, makes sure to compare against the maximum cargo capacity of the vessel
     pub fn load_cargo(&mut self, cargo: uom::si::f64::Mass) {
         // Check if the cargo is too heavy
         match self.cargo_max_capacity {
             Some(max_capacity) => {
                 if cargo > max_capacity {
+                    // TODO: return error instead of panic
                     panic!("Cargo is too heavy");
                 }
             }
