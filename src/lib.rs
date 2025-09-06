@@ -581,7 +581,11 @@ pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
 
     let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}\nInput string: {}\nError\n", &working_str[11..13], working_str).as_str());
     let minutes: u8 = working_str[14..16].parse::<u8>().expect(format!("Invalid minute: {}\nInput string: {}\nError\n", &working_str[14..16], working_str).as_str());
-    let seconds: u8 = working_str[17..19].parse::<u8>().expect(format!("Invalid second: {}\nInput string: {}\nError\n", &working_str[17..19], working_str).as_str());
+    let mut seconds: u8 = 0;
+    // If we have seconds, get them
+    if working_str.len() >= 19 {
+        seconds = working_str[17..19].parse::<u8>().expect(format!("Invalid second: {}\nInput string: {}\nError\n", &working_str[17..19], working_str).as_str());
+    }
     let time_hms = time::Time::from_hms(hour, minutes, seconds).expect("Could not create time::Time from values");
 
     // Attempt to parse the string into a uom::si::f64::Time object
