@@ -6,7 +6,7 @@
 /// Make another crate, sailplanner, that can make route plans for marine vessels.
 
 /// External crates
-use csv;    use geo::InterpolatePoint;
+use csv;
 // CSV reader to read csv files
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Rhumb, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
@@ -574,15 +574,15 @@ pub fn string_to_utc_date_time(time_string: String) -> time::UtcDateTime {
     }
 
     // Get parts from string
-    let year:    i32 = working_str[0..4].parse::<i32>().expect("Invalid year");
-    let month = time::Month::try_from(working_str[5..7].parse::<u8>().expect("Invalid month")).expect("Invalid month");
-    let day_of_month: u8 = working_str[8..10].parse::<u8>().expect("Invalid day");
+    let year:    i32 = working_str[0..4].parse::<i32>().expect(format!("Invalid year: {}\nInput string: {}\nError\n", &working_str[0..4], working_str).as_str());
+    let month = time::Month::try_from(working_str[5..7].parse::<u8>().expect(format!("Invalid month: {}\nInput string: {}\nError\n", &working_str[5..7], working_str).as_str())).expect("Invalid month");
+    let day_of_month: u8 = working_str[8..10].parse::<u8>().expect(format!("Invalid day: {}\nInput string: {}\nError\n", &working_str[8..10], working_str).as_str());
     let date = time::Date::from_calendar_date(year, month, day_of_month).expect("Could not create time::Date from values");
 
     let hour: u8 = working_str[11..13].parse::<u8>().expect(format!("Invalid hour: {}\nInput string: {}\nError\n", &working_str[11..13], working_str).as_str());
-    let minutes: u8 = working_str[14..16].parse::<u8>().expect("Invalid minute");
-    // let seconds: u8 = working_str[17..19].parse::<u8>().expect("Invalid second");
-    let time_hms = time::Time::from_hms(hour, minutes, 0).expect("Could not create time::Time from values");
+    let minutes: u8 = working_str[14..16].parse::<u8>().expect(format!("Invalid minute: {}\nInput string: {}\nError\n", &working_str[14..16], working_str).as_str());
+    let seconds: u8 = working_str[17..19].parse::<u8>().expect(format!("Invalid second: {}\nInput string: {}\nError\n", &working_str[17..19], working_str).as_str());
+    let time_hms = time::Time::from_hms(hour, minutes, seconds).expect("Could not create time::Time from values");
 
     // Attempt to parse the string into a uom::si::f64::Time object
     let time_out = time::UtcDateTime::new(date, time_hms);
