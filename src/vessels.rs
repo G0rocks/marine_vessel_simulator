@@ -122,30 +122,38 @@ pub struct Boat {
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
+    pub current_leg: Option<u32>,
+    pub destination: Option<geo::Point>,
+    pub draft: Option<uom::si::f64::Length>,
+    /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub heading: Option<f64>,
+    /// Coefficient of drag for the hull
+    pub hull_drag_coefficient: Option<f64>,
     pub imo: Option<u32>,
+    pub length: Option<uom::si::f64::Length>,
+    pub location: Option<geo::Point>,
+    /// Mass of the boat without cargo or fuel (a.k.a dry weight)
+    pub mass: Option<uom::si::f64::Mass>,
     pub min_angle_of_attack: Option<f64>,
     pub name: Option<String>,
     pub navigation_status: Option<NavigationStatus>,
-    pub location: Option<geo::Point>,
-    pub heading: Option<f64>,   /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
-    pub sail: Option<Sail>,
-    pub rudder: Option<Rudder>,
     pub route_plan: Option<Vec<SailingLeg>>,
-    pub current_leg: Option<u32>,
-    pub length: Option<uom::si::f64::Length>,
-    pub width: Option<uom::si::f64::Length>,
-    pub draft: Option<uom::si::f64::Length>,
-    pub mass: Option<uom::si::f64::Mass>,   /// Mass of the boat without cargo or fuel (a.k.a dry weight)
-    pub velocity_current: Option<PhysVec>,  /// Current velocity of the boat with magnitude and direction
-    pub velocity_mean: Option<uom::si::f64::Velocity>,  /// The average velocity of the boat, only magnitude
-    pub velocity_std: Option<uom::si::f64::Velocity>,   /// The standard deviation of the velocity of the boat, only magnitude
-    pub wind_preferred_side: VesselSide,  /// Preferred side of the boat for the wind to hit
-    pub hull_drag_coefficient: Option<f64>,  /// Coefficient of drag for the hull
+    pub rudder: Option<Rudder>,
+    pub sail: Option<Sail>,
     pub ship_log: Vec<ShipLogEntry>,
     /// The current time for the boat
     pub time_now: time::UtcDateTime,
     /// The true bearing (true as in from north) to the next waypoint
     pub true_bearing: Option<f64>,
+    /// Current velocity of the boat with magnitude and direction
+    pub velocity_current: Option<PhysVec>,
+    /// The average velocity of the boat, only magnitude
+    pub velocity_mean: Option<uom::si::f64::Velocity>,
+    /// The standard deviation of the velocity of the boat, only magnitude
+    pub velocity_std: Option<uom::si::f64::Velocity>,
+    pub width: Option<uom::si::f64::Length>,
+    /// Preferred side of the boat for the wind to hit
+    pub wind_preferred_side: VesselSide,
 }
 
 // Implementation of the Boat struct
@@ -155,32 +163,33 @@ impl Boat {
     /// Make sure to set the values you need to use to the correct values 
     pub fn new() -> Boat {
         Boat {
-            imo: None,
-            name: None,
-            navigation_status: None,
-            min_angle_of_attack: None,
-            location: None,
-            heading: None,
-            sail: None,
-            rudder: None,
-            route_plan: None,
-            current_leg: None,
-            length: None,
-            width: None,
-            draft: None,
-            mass: None,
-            velocity_current: None,
-            velocity_mean: None,
-            velocity_std: None,
-            cargo_max_capacity: None,
             cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
+            cargo_max_capacity: None,
             cargo_mean: None,
             cargo_std: None,
-            wind_preferred_side: VesselSide::Starboard,  // Default to starboard since then we have the right of way in most cases
+            current_leg: None,
+            destination: None,
+            draft: None,
+            heading: None,
             hull_drag_coefficient: None,
+            imo: None,
+            length: None,
+            location: None,
+            mass: None,
+            min_angle_of_attack: None,
+            name: None,
+            navigation_status: None,
+            route_plan: None,
+            rudder: None,
+            sail: None,
             ship_log: Vec::new(),
             time_now: UtcDateTime::now(),
             true_bearing: None,
+            velocity_current: None,
+            velocity_mean: None,
+            velocity_std: None,
+            width: None,
+            wind_preferred_side: VesselSide::Starboard,  // Default to starboard since then we have the right of way in most cases
         }
     }
 
