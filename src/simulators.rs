@@ -15,6 +15,8 @@ pub enum SimMethod {
     // WeatherDataFromFile,
     /// Use the copernicus weather data from the past for the exact location of the boat to simulate the boat movements
     WeatherDataFromCopernicus,
+    /// Use the copernicus weather data but only downloads it once for the route and presumes the weather stays the same to simulate the trip quickly
+    FastWeatherDataFromCopernicus,
     // Use the copernicus weather forecast data for the exact location of the boat to simulate the boat movements
     // Copernicus_Weather_Forecast,
 }
@@ -37,6 +39,8 @@ pub struct Simulation {
     pub copernicus: Option<copernicusmarine_rs::Copernicus>,
     /// Progress bar, set to none if not needed, if you use, set the length to the total number of legs in all simulations
     pub progress_bar: Option<indicatif::ProgressBar>,
+    /// How many segments the route should be split into if the simulation calls for it
+    pub n_segments: Option<u64>,
 }
 
 impl Simulation {
@@ -56,7 +60,8 @@ impl Simulation {
             max_iterations,
             weather_data_file,
             copernicus,
-            progress_bar: None
+            progress_bar: None,
+            n_segments: None,
         }
     }
 }
@@ -152,6 +157,17 @@ pub fn sim_waypoint_mission(boat: &mut Boat, start_time: time::UtcDateTime, simu
         SimMethod::WeatherDataFromCopernicus => {
             // Simulate the boat using weather data from Copernicus
             match sim_waypoint_mission_weather_data_from_copernicus(boat, start_time, simulation) {
+                Ok(sim_msg) => {
+                    return Ok(sim_msg);
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+        SimMethod::FastWeatherDataFromCopernicus => {
+            // Simualate the boat quickly using 1 download of weather data from copernicus
+            match fast_sim_waypoint_mission_weather_data_from_copernicus(boat, start_time, simulation) {
                 Ok(sim_msg) => {
                     return Ok(sim_msg);
                 }
@@ -760,3 +776,113 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Return the ship log TODO: Move inside for loop
     return Ok("Maximized number of iterations. Stopping simulation".to_string());
 }
+
+
+
+
+/// Simulates the boat quickly using 1 download of weather data from copernicus marine
+/// Downloads the 
+pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
+    // Verify that necessary fields are set
+    if simulation.weather_data_file.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather data file name from simulation"));
+    }
+    if simulation.copernicus.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing copernicus info from simulation"));
+    }
+    if simulation.n_segments.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing n_segments from simulation"));
+    }
+    if simulation.weather_data_file.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing weather_data_file from simulation"));
+    }
+    if boat.mass.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing mass from boat"));
+    }
+    if boat.sail.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing sail from boat"));
+    }
+    if boat.min_angle_of_attack.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing minimum angle of attack from boat"));
+    }
+    if boat.route_plan.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
+    }
+    // TODO: Add drag
+    // if boat.hull_drag_coefficient.is_none() {
+    //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
+    // }
+
+    // Segment route into waypoints
+    let (segment_points, segment_dist) = segment_waypoint_mission(boat.route_plan.clone().unwrap(), simulation.n_segments.unwrap());
+
+    // Get the weather data for all the waypoints from weather file information, load data from file
+    let (_timestamps, weather_points, wind_vec, ocean_current_vec) = get_weather_data_from_csv_file(simulation.weather_data_file.clone().unwrap());
+
+    // Sanity check that the points are the same, if not, return error
+    if segment_points.len() != weather_points.len() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, std::format!("Waypoints don't match. From route plan are {} points but from weather data are {} points", segment_points.len(), weather_points.len())));
+    }
+    for i in 0..segment_points.len() {
+        if segment_points[i] != weather_points[i] {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, std::format!("Waypoints don't match. From route plan, point {} is: {:?} but from weather data point {} is {:?}", i, segment_points[i], i, weather_points[i])));
+        }
+    }
+
+    // Add initial point info to ship logs
+    boat.location = Some(segment_points[0]);
+    boat.current_leg = Some(1);
+    boat.time_now = start_time;
+    boat.log_entry_into_ship_log();
+
+
+    // Calculate how much time it would take to travel between each point using the weather data, minimum angle of attack etc.
+    // Loop through each point
+    for i in 0..segment_points.len() {
+        // Check the bearing, distance and conditions from current point to next point
+        boat.heading = Some(geo::Haversine.bearing(boat.location.unwrap(), segment_points[i]));
+        boat.true_bearing = Some(geo::Haversine.bearing(boat.location.unwrap(), segment_points[i]));
+        
+        // Calculate time it would take to sail to next point, add to boats time
+        // Get working velocity
+        boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude, boat.heading.unwrap()) + ocean_current_vec[i]);
+        // Compute the velocity component along the direction to the bearing
+        let velocity_component_along_bearing = boat.velocity_current.unwrap().magnitude*(boat.velocity_current.unwrap().angle - boat.true_bearing.unwrap()).cos();
+        let time_to_next_point = segment_dist / velocity_component_along_bearing;
+        // Update boat time
+        boat.time_now.checked_add(time::Duration::seconds_f64(time_to_next_point));
+
+        // Move boat to point
+        boat.location = Some(segment_points[i]);
+
+        // Do we pass a waypoint?
+        // If closer than minimum proximity to next waypoint, update current leg
+        let mut waypoint_passed: Option<usize> = None;
+        if geo::Haversine.distance(boat.location.unwrap(), boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].p2) <= boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap() -1) as usize].min_proximity {
+            waypoint_passed = Some(boat.current_leg.unwrap() as usize);
+        }
+
+        // If we pass a waypoint (finish a leg), update leg number and progress bar
+        if waypoint_passed.is_some() {
+            // If it was the last point, break the loop
+            if boat.route_plan.as_ref().unwrap()[waypoint_passed.unwrap()].p2 == boat.route_plan.as_ref().unwrap().last().unwrap().p2 {
+                // Route finished so break
+                break;
+            }
+
+            // Update leg number
+            boat.current_leg = Some(boat.current_leg.unwrap() + 1);
+
+            // Update progress bar
+            simulation.progress_bar.as_ref().unwrap().inc(1);
+        }
+
+        // Add new ship log entry
+        boat.log_entry_into_ship_log();
+    }
+
+    // Simulation finished
+    return Ok("Simulation completed".to_string());
+}
+
+
