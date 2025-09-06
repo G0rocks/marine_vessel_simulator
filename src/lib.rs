@@ -1337,6 +1337,53 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
     return Ok("weather data retrieved and saved successfully".to_string());
 }
 
+/// Function that gets weather data from file
+pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>, Vec<geo::Point>, Vec<PhysVec>, Vec<PhysVec>) {
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(path_to_file)
+        .expect("Failed to open the file");
+
+    // Initialize return vectors
+    let mut timestamps: Vec<UtcDateTime> = Vec::new();
+    let mut points: Vec<geo::Point> = Vec::new();
+    let mut wind_vec: Vec<PhysVec> = Vec::new();
+    let mut ocean_current_vec: Vec<PhysVec> = Vec::new();
+
+    // Iterate through each line of the CSV file and add the coordinates to the route plan
+    for result in csv_reader.records() {
+        match result {
+            Ok(entry) => {
+                // timestamp
+                let timestamp = entry.get(0).expect("timestamp missing from weather data file").to_string();
+                timestamps.push(string_to_utc_date_time(timestamp));
+                // Point
+                let longitude: f64 = entry.get(1).expect("longitude missing from weather data file").parse::<f64>().unwrap();
+                let latitude: f64 =  entry.get(2).expect("latitude missing from weather data file").parse::<f64>().unwrap();
+                let point = geo::Point::new(longitude, latitude);
+                points.push(point);
+                // Wind
+                let wind_speed = entry.get(3).expect("wind speed missing from weather data file").parse::<f64>().unwrap();
+                let wind_angle = entry.get(4).expect("wind angle missing from weather data file").parse::<f64>().unwrap();
+                let wind = PhysVec::new(wind_speed, wind_angle);
+                wind_vec.push(wind);
+                // Ocean current
+                let ocean_current_speed = entry.get(5).expect("ocean current speed missing from weather data file").parse::<f64>().unwrap();
+                let ocean_current_angle = entry.get(6).expect("ocean current angle missing from weather data file").parse::<f64>().unwrap();
+                let ocean_current = PhysVec::new(ocean_current_speed, ocean_current_angle);
+                ocean_current_vec.push(ocean_current);
+            }
+            Err(err) => {
+                eprintln!("Error reading weather data from file: {}", err);
+            }
+        }
+    }
+    
+    // Return (timestamps, points, wind_vec, ocean_current_vec)
+    return (timestamps, points, wind_vec, ocean_current_vec);
+}
 
 
 // Set up tests here
