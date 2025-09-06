@@ -1199,7 +1199,14 @@ pub fn segment_waypoint_mission(route_plan: Vec<SailingLeg>, n_segments: u64) ->
     let mut current_leg = 0;
     // Init boat location
     let mut location = route_plan[0].p1;
+    let mut num_points = 1;
     while waypoints.last().unwrap() != &route_plan.last().unwrap().p2 {
+        // If number of waypoints is number of segments then the next waypoint should be the last point, make it happen explicitly since floating point error can
+        // cause issues where we have 1 too many points otherwise
+        if num_points == n_segments {
+            waypoints.push(route_plan.last().unwrap().p2);
+            break;
+        }
         // Reset seg_dist_left
         seg_dist_left = segment_dist.clone();
 
@@ -1232,6 +1239,7 @@ pub fn segment_waypoint_mission(route_plan: Vec<SailingLeg>, n_segments: u64) ->
         }
         // Add location
         waypoints.push(location);
+        num_points += 1;
     }
 
     // Return waypoints and segment distance
