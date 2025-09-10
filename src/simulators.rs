@@ -855,11 +855,11 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
         // Calculate time it would take to sail to next point, add to boats time
         // Get working velocity
         boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude, boat.heading.unwrap()) + ocean_current_vec[i]);
-        // Compute the velocity component along the direction to the bearing
-        let velocity_component_along_bearing = boat.velocity_current.unwrap().magnitude*(boat.velocity_current.unwrap().angle - boat.true_bearing.unwrap()).cos();
+        // Compute the velocity component along the direction to the bearing or "Velocity made good on course (VMC)" https://en.wikipedia.org/wiki/Velocity_made_good
+        let velocity_component_along_bearing = boat.velocity_current.unwrap().magnitude*((boat.velocity_current.unwrap().angle - boat.true_bearing.unwrap())*consts::PI/180.0).cos();
         let time_to_next_point = segment_dist / velocity_component_along_bearing;
         // Update boat time
-        boat.time_now.checked_add(time::Duration::seconds_f64(time_to_next_point));
+        boat.time_now = boat.time_now.checked_add(time::Duration::seconds_f64(time_to_next_point)).expect(format!("Could not add {} seconds to boat time: {}", time_to_next_point, boat.time_now).as_str());
 
         // Move boat to point
         boat.location = Some(segment_points[i]);
