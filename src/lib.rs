@@ -193,7 +193,12 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     // Update trip distance
                     trip_dist += dist;
                     // Calculate the speed
-                    let speed = dist / uom::si::f64::Time::new::<uom::si::time::second>((timestamp - last_timestamp).whole_seconds() as f64);
+                    let speed = dist / uom::si::f64::Time::new::<uom::si::time::second>((timestamp - last_timestamp).as_seconds_f64() as f64);
+
+                    // TODO remove debug messages:
+                    // println!("dist: {:?}", dist);
+                    // println!("Time elapsed: {}", timestamp - last_timestamp);
+                    // println!("Speed: {:?}", speed);
 
                     // Update last_timestamp
                     last_timestamp = timestamp;
@@ -826,6 +831,14 @@ pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
     let speed_mean: uom::si::f64::Velocity = tot_speed / speed_vec.len() as f64;
     let speed_mean_f64: f64 = speed_mean.get::<uom::si::velocity::meter_per_second>();
 
+    // TODO remove debug messages
+    // println!("Total speed: {:?}", tot_speed);
+    // println!("speed vec length: {}", speed_vec.len());
+    // println!("Mean speed: {:?}", speed_mean);
+    // println!("speed vec: {:?}", speed_vec);
+
+
+
     // Calculate the standard deviation of the speed vector
     let mut variance: f64 = 0.0;
 
@@ -1254,12 +1267,12 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
     println!("Getting weather data");
     // Initialize weather data vectors
     let mut wind_vec: Vec<PhysVec> = Vec::new();
-    let mut ocean_current_vec: Vec<PhysVec> = Vec::new();
+    let mut ocean_current_vec: Vec<Option<PhysVec>> = Vec::new();
     // Get number of points
     let num_points = points.len();
 
     // Start a progress bar with twice the tasks as num_points
-    let progress_bar = indicatif::ProgressBar::new((num_points*2) as u64);
+    let progress_bar = indicatif::ProgressBar::new((num_points) as u64);
     // Set progress bar style
     progress_bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
     // Configure live redraw
@@ -1279,8 +1292,8 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
         let wind_north_data = &wind_data[1];
 
         // Wind speed and direction
-        let wind_east: f64 = wind_east_data[0];
-        let wind_north: f64 = wind_north_data[0];
+        let wind_east: f64 = wind_east_data[0].unwrap();
+        let wind_north: f64 = wind_north_data[0].unwrap();
         let wind_angle: f64 = get_north_angle_from_northward_and_eastward_property(wind_east, wind_north);   // Angle in degrees
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind_vec.push(PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), wind_angle));    // unit [m/s]
@@ -1295,11 +1308,23 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
         let ocean_current_north_data = &ocean_current_data[1];
 
         // Ocean current speed and direction
-        let ocean_current_east: f64 = ocean_current_east_data[0];
-        let ocean_current_north: f64 = ocean_current_north_data[0];
-        let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
-        let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
-        ocean_current_vec.push(PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle));    // unit [m/s]
+        // If we don't have ocean_current data, push None to ocean_current_vec.
+        if ocean_current_east_data[0].is_none() && ocean_current_north_data[0].is_none() {
+            ocean_current_vec.push(None);
+        }
+        else {
+            let mut ocean_current_east: f64 = 0.0;
+            let mut ocean_current_north: f64 = 0.0;
+            if ocean_current_east_data[0].is_some() {
+                ocean_current_east = ocean_current_east_data[0].expect("Ocean current fill value?");
+            }
+            if ocean_current_north_data[0].is_some() {
+                ocean_current_north = ocean_current_north_data[0].expect("Ocean current fill value?");
+            }
+            let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
+            let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
+            ocean_current_vec.push(Some(PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle)));    // unit [m/s]
+        }
 
         // Update progress bar
         progress_bar.inc(1);
@@ -1337,10 +1362,19 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
         let wind_speed = wind_vec[i].magnitude.to_string();
         // Get wind_angle
         let wind_angle = wind_vec[i].angle.to_string();
-        // Get ocean_current_speed
-        let ocean_current_speed = ocean_current_vec[i].magnitude.to_string();
-        // Get ocean_current_angle
-        let ocean_current_angle = ocean_current_vec[i].angle.to_string();
+        // Get ocean_current_speed and angle
+        let ocean_current_speed: String;
+        let ocean_current_angle: String;
+        if ocean_current_vec[i].is_some() {
+            ocean_current_speed = ocean_current_vec[i].unwrap().magnitude.to_string();
+            ocean_current_angle = ocean_current_vec[i].unwrap().angle.to_string();
+        }
+        else {
+            ocean_current_speed = "".to_string();
+            ocean_current_angle = String::new();
+            // ocean_current_speed = "None".to_string();
+            // ocean_current_angle = "None".to_string();
+        }
 
         // Write the record
         wtr.write_record(&[
@@ -1350,10 +1384,7 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
             wind_speed,
             wind_angle,
             ocean_current_speed,
-            ocean_current_angle,])?;
-        
-        // Update progress bar
-        progress_bar.inc(1);
+            ocean_current_angle,])?;        
     }
 
     // Flush and close the writer
@@ -1367,7 +1398,8 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
 }
 
 /// Function that gets weather data from file
-pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>, Vec<geo::Point>, Vec<PhysVec>, Vec<PhysVec>) {
+/// The output tuple is the (timstamp, location, wind vector, ocean current vector)
+pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>, Vec<geo::Point>, Vec<PhysVec>, Vec<Option<PhysVec>>) {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
@@ -1379,7 +1411,7 @@ pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>
     let mut timestamps: Vec<UtcDateTime> = Vec::new();
     let mut points: Vec<geo::Point> = Vec::new();
     let mut wind_vec: Vec<PhysVec> = Vec::new();
-    let mut ocean_current_vec: Vec<PhysVec> = Vec::new();
+    let mut ocean_current_vec: Vec<Option<PhysVec>> = Vec::new();
 
     // Iterate through each line of the CSV file and add the coordinates to the route plan
     for result in csv_reader.records() {
@@ -1399,9 +1431,18 @@ pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>
                 let wind = PhysVec::new(wind_speed, wind_angle);
                 wind_vec.push(wind);
                 // Ocean current
-                let ocean_current_speed = entry.get(5).expect("ocean current speed missing from weather data file").parse::<f64>().unwrap();
-                let ocean_current_angle = entry.get(6).expect("ocean current angle missing from weather data file").parse::<f64>().unwrap();
-                let ocean_current = PhysVec::new(ocean_current_speed, ocean_current_angle);
+                let ocean_current_speed_csv_entry = entry.get(5).unwrap();
+                let ocean_current_angle_csv_entry = entry.get(6).unwrap();
+                let ocean_current_speed: f64;
+                let ocean_current_angle: f64;
+                let ocean_current: Option<PhysVec>;
+                if ocean_current_speed_csv_entry == "" || ocean_current_angle_csv_entry == "" {
+                    ocean_current = None;
+                } else {
+                    ocean_current_speed = ocean_current_speed_csv_entry.parse::<f64>().unwrap();
+                    ocean_current_angle = ocean_current_angle_csv_entry.parse::<f64>().unwrap();
+                    ocean_current = Some(PhysVec::new(ocean_current_speed, ocean_current_angle));
+                }
                 ocean_current_vec.push(ocean_current);
             }
             Err(err) => {

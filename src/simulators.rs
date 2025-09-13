@@ -624,8 +624,8 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let ocean_current_north_data = &ocean_current_data[1];
 
         // Ocean current speed and direction
-        let ocean_current_east: f64 = ocean_current_east_data[0];
-        let ocean_current_north: f64 = ocean_current_north_data[0];
+        let ocean_current_east: f64 = ocean_current_east_data[0].expect("ocean current fill value?");
+        let ocean_current_north: f64 = ocean_current_north_data[0].expect("ocean current fill value?");
         let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
         let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
         ocean_current = PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle);    // unit [m/s]
@@ -854,7 +854,11 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
         
         // Calculate time it would take to sail to next point, add to boats time
         // Get working velocity
-        boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude, boat.heading.unwrap()) + ocean_current_vec[i]);
+        boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude, boat.heading.unwrap()));
+        // If there's ocean current, add that to boats velocity
+        if ocean_current_vec[i].is_some() {
+            boat.velocity_current = Some(boat.velocity_current.unwrap() + ocean_current_vec[i].unwrap());
+        }
         // Compute the velocity component along the direction to the bearing or "Velocity made good on course (VMC)" https://en.wikipedia.org/wiki/Velocity_made_good
         let velocity_component_along_bearing = boat.velocity_current.unwrap().magnitude*((boat.velocity_current.unwrap().angle - boat.true_bearing.unwrap())*consts::PI/180.0).cos();
         let time_to_next_point = segment_dist / velocity_component_along_bearing;
