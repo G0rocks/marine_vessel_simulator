@@ -602,14 +602,14 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // Get wind data from Copernicus
         let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
             Ok(w) => w,
-            Err(e) => panic!("Error getting wind data from copernicusmarine: {}", e),
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error getting wind data from copernicusmarine: {}", e))),
         };
         let wind_east_data = &wind_data[0];
         let wind_north_data = &wind_data[1];
 
         // Wind speed and direction
-        let wind_east: f64 = wind_east_data[0];
-        let wind_north: f64 = wind_north_data[0];
+        let wind_east: f64 = wind_east_data[0].unwrap();
+        let wind_north: f64 = wind_north_data[0].unwrap();
         let wind_angle: f64 = get_north_angle_from_northward_and_eastward_property(wind_east, wind_north);   // Angle in degrees
         let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
         wind = PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), wind_angle);    // unit [m/s]
