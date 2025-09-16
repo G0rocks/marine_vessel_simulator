@@ -6,12 +6,11 @@
 /// Make another crate, sailplanner, that can make route plans for marine vessels.
 
 /// External crates
-use csv;
-// CSV reader to read csv files
+use csv; // CSV reader to read csv files
 use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Rhumb, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
-use std::{io, fmt, f64::consts}; // To use errors and for formatting
+use std::{io, fmt, f64::consts, fs::File, io::Write}; // To use errors, formatting, constants, write to file
 // use plotters; // Plotters for visualizing data on a map. Uses only rust, no javascript. Will probably be removed in favor of plotly
 use plotly; // Plotly for visualizing data on a map. Testing in comparison agains plotters
 use copernicusmarine_rs;    // To get weather data
@@ -1453,6 +1452,39 @@ pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>
     
     // Return (timestamps, points, wind_vec, ocean_current_vec)
     return (timestamps, points, wind_vec, ocean_current_vec);
+}
+
+
+/// Function that saves the settings of the simulation to a text file.
+/// Note: This function does not care about overwriting existing files, it will always overwrite.
+pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(), io::Error> {
+    // Check that file_path ends with ".txt"
+    let num_chars = file_path.chars().count();
+    if &file_path[(num_chars-4)..] != ".txt" {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "The filepath must end with \".txt\""));
+    }
+
+    // Make string to write to file
+    let mut settings_string: String = String::new();
+    settings_string.push_str("Simulation settings:\n");
+    settings_string.push_str(&format!("Simulation method: {:?}\n", sim.simulation_method));
+    settings_string.push_str(&format!("Simulation start times: {:?}\n", sim.start_times));
+    settings_string.push_str(&format!("Simulation time step: {}\n", sim.time_step));
+    settings_string.push_str(&format!("Simulation max iterations: {}\n", sim.max_iterations));
+    settings_string.push_str(&format!("Simulation weather_data_file: {:?}\n", sim.weather_data_file));
+    settings_string.push_str(&format!("Simulation copernicus: {:?}\n", sim.copernicus));
+    settings_string.push_str(&format!("Simulation progress bar: {:?}\n", sim.progress_bar));
+    settings_string.push_str(&format!("Simulation number of segments: {:?}\n", sim.n_segments));
+
+    // Write string to file
+    println!("Saving simulation settings to file: {}", settings_string);
+
+    let mut f = File::create(file_path)?;
+    f.write_all(&settings_string.into_bytes())?;
+
+
+    // Return ok
+    return Ok(());
 }
 
 

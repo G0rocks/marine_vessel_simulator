@@ -29,12 +29,12 @@ pub struct Simulation {
     pub simulation_method: SimMethod,
     /// Start times for the simulation
     pub start_times: Vec<time::UtcDateTime>,
-    /// The time step for the simulation in days
-    pub time_step: time::Duration, // Time step for the simulation in seconds
+    /// The time step for the simulation in seconds
+    pub time_step: time::Duration,
     /// The maximum number of iterations for the simulation
-    pub max_iterations: usize, // Maximum number of iterations for the simulation
+    pub max_iterations: usize,
     /// Weather data file for the simulation
-    pub weather_data_file: Option<String>, // Weather data file for the simulation
+    pub weather_data_file: Option<String>,
     /// Copernicus information
     pub copernicus: Option<copernicusmarine_rs::Copernicus>,
     /// Progress bar, set to none if not needed, if you use, set the length to the total number of legs in all simulations
