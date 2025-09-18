@@ -1279,7 +1279,7 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
     // Start a progress bar with twice the tasks as num_points
     let progress_bar = indicatif::ProgressBar::new((num_points) as u64);
     // Set progress bar style
-    progress_bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{eta:>1}").unwrap()); //.progress_chars("##-"));
+    progress_bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}] {bar} {pos:>3}/{len:3} ETA:{duration_precise:>1}").unwrap()); //.progress_chars("##-"));
     // Configure live redraw
     progress_bar.set_draw_target(indicatif::ProgressDrawTarget::stdout());
     progress_bar.enable_steady_tick(std::time::Duration::from_millis(500));
@@ -1289,7 +1289,12 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
     // For each point, get the wind and current
     for i in 0..num_points {
         // Get the wind data
-        let wind_data = match copernicus.get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), None, None) {
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardWind, timestamp, timestamp) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        // let wind_data = match copernicus.get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), None, None) {
+        let wind_data = match copernicus.get_f64_values(dataset_id, vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), None, None) {
             Ok(w) => w,
             Err(e) => panic!("Error getting wind data from copernicusmarine: {}", e),
         };
@@ -1305,7 +1310,12 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
 
         // Get ocean current data from Copernicus
         // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
-        let ocean_current_data = match copernicus.get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardSeaWaterVelocity, timestamp, timestamp) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        // let ocean_current_data = match copernicus.get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
+        let ocean_current_data = match copernicus.get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
             Ok(o) => o,
             Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
         };

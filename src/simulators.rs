@@ -600,7 +600,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         let tacking_width: f64 = boat.route_plan.as_ref().unwrap()[(boat.current_leg.unwrap()-1) as usize].tacking_width;
 
         // Get wind data from Copernicus
-        let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardWind, boat_time_now, boat_time_now) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        // let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
+        let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
             Ok(w) => w,
             Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error getting wind data from copernicusmarine: {}", e))),
         };
@@ -616,7 +621,12 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Get ocean current data from Copernicus
         // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
-        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardSeaWaterVelocity, boat_time_now, boat_time_now) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        // let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
+        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
             Ok(o) => o,
             Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
         };
@@ -897,5 +907,3 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
     // Simulation finished
     return Ok("Simulation completed".to_string());
 }
-
-
