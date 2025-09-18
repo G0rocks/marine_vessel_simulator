@@ -1161,9 +1161,15 @@ pub fn geo_point_to_xy(point_in: geo::Point) -> (f32, f32) {
 
 /// Function that gets the angle from north given the northward PhysVec property (effectively, the magnitude going from north to south) and eastward PhysVec property (effectively, the magnitude going from west to east)
 pub fn get_north_angle_from_northward_and_eastward_property(eastward: f64, northward: f64) -> f64 {
-    let atan_result = northward.atan2(eastward) * 180.0 / std::f64::consts::PI;
+    let mut north_angle = northward.atan2(eastward) * 180.0 / std::f64::consts::PI;
 
-    let mut north_angle = 90.0-atan_result;
+    // Adjust result from atan2 to be between 0 and 360
+    if north_angle < 0.0 {
+        north_angle += 360.0;
+    }
+    
+    // transform angle to be based from north not east
+    north_angle -= 90.0;
 
     // Adjusting if went out of bounds
     while north_angle >= 360.0 {
