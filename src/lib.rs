@@ -1419,8 +1419,8 @@ pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)
-        .from_path(path_to_file)
-        .expect("Failed to open the file");
+        .from_path(path_to_file.clone())
+        .expect(format!("Failed to open file: {}", path_to_file.as_str()).as_str());
 
     // Initialize return vectors
     let mut timestamps: Vec<UtcDateTime> = Vec::new();
