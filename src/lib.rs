@@ -995,7 +995,7 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
         .delimiter(b';')
         .has_headers(true)
         .from_path(file_path)
-        .expect("Failed to open the file");
+        .expect(format!("Failed to open route plan file: {}", file_path).as_str());
 
     // Initialize a vector to store the route plan
     let mut route_plan: Vec<SailingLeg> = Vec::new();
