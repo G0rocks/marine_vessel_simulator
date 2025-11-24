@@ -123,11 +123,11 @@ impl std::ops::Sub for PhysVec {
 /// # Example:
 /// ```
 /// let filename: &str = "../data/mydata.csv";
-/// // Distance in km
-/// let distance: u64 = 8000;
+/// // Distance in meters
+/// let distance: f64 = 50;
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 /// ```
-pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
+pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximity: f64) ->
     (Option<f64>, Option<f64>,
         Option<f64>, Option<f64>,
         Option<time::Duration>, Option<time::Duration>,
@@ -217,7 +217,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 }
 
                 // If final coordinate, the trip just ended
-                if coordinates_current == coordinates_final {
+                if Haversine.distance(coordinates_current, coordinates_final) <= destination_minimum_proximity {
                     // Add travel time to travel time vector
                     travel_time_vec.push(timestamp - start_time);
                     // Add trip distance to distance vector
@@ -330,7 +330,7 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
         .from_path(csv_file_path)?;
 
     // Write the header
-    wtr.write_record(&["name","speed_mean[m/s]","speed_std[m/s]","cargo_mean[tons]","cargo_std[tons]","travel_time_mean[days]","travel_time_std[days]","dist_mean[km]","dist_std[m]","num_trips:"])?;
+    wtr.write_record(&["name","speed_mean[m/s]","speed_std[m/s]","cargo_mean[tons]","cargo_std[tons]","travel_time_mean[days]","travel_time_std[days]","dist_mean[m]","dist_std[m]","num_trips:"])?;
 
     // Write the ship log entries
     for i in 0..vec_size {
@@ -354,8 +354,8 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
         let travel_time_mean = &travel_time_mean_vec[i].unwrap().to_string();
         // Get travel_time_std
         let travel_time_std = &travel_time_std_vec[i].unwrap().to_string();
-        // Get dist_mean in kilometers
-        let dist_mean = &(dist_mean_vec[i].unwrap()/1000.0).to_string();
+        // Get dist_mean in meters
+        let dist_mean = &(dist_mean_vec[i].unwrap()).to_string();
         // Get dist_std in meters
         let dist_std = &dist_std_vec[i].unwrap().to_string();
         // Get num_trips
