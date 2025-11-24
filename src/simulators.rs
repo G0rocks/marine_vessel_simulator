@@ -197,8 +197,8 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
     // Get total number of legs
     let total_legs: usize = boat.route_plan.as_ref().expect("Route plan missing?").len();
 
-    // Init travel_dist
-    let mut travel_dist: uom::si::f64::Length;
+    // Init travel_dist as zero
+    let mut travel_dist: f64;
 
     // Init ship_log_entry
     // Get initial location
@@ -211,10 +211,10 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
         coordinates_current: coordinates_initial,
         coordinates_final: coordinates_final,
         cargo_on_board: Some(boat.cargo_current),
-        velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), 0.0)),  // Initial velocity is defaulted to direction zero degrees
+        velocity: Some(PhysVec::new(boat.velocity_mean.unwrap(), 0.0)),  // Initial velocity is defaulted to direction zero degrees
         course: None,
         heading: None,
-        track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
+        track_angle: Some(Rhumb.bearing(coordinates_initial, boat.route_plan.as_ref().unwrap()[0].p2)),
         true_bearing: None,
         draft: None,
         navigation_status: None,
@@ -225,17 +225,19 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
     // Loop through each time step
     for i in 0..simulation.max_iterations {
         // Simulate the boat moving towards the next waypoint
-        // Get distance traveled in time step
+        // Get distance traveled [m] in time step [s] with velocity [m/s]
         // travel_dist = boat.velocity_mean.unwrap() * time_step;
-        travel_dist = boat.velocity_mean.unwrap() * uom::si::f64::Time::new::<uom::si::time::day>(simulation.time_step.as_seconds_f64()); // travel_dist in meters, https://docs.rs/uom/latest/uom/si/f64/struct.Velocity.html#method.times
+        travel_dist = boat.velocity_mean.unwrap() * simulation.time_step.as_seconds_f64();
 
         // While still have some distance left to travel during time step
-        while travel_dist.get::<uom::si::length::meter>() > 0.0 {
+        while travel_dist > 0.0 {
 
             // Get next waypoint
             let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
             // Get distance to next waypoint from current location
-            let dist_to_next_waypoint: uom::si::f64::Length = haversine_distance_uom_units(boat.location.unwrap(), next_waypoint);
+            let dist_to_next_waypoint: f64 = Haversine.distance(boat.location.unwrap(), next_waypoint);
+            // Set vessel heading as heading to next waypoint
+            boat.heading = Some(geo::Haversine.bearing(boat.location.unwrap(), next_waypoint));
 
             // if distance traveled is greater than the distance to the next waypoint move to next waypoint, update current leg number and go to next while loop iteration
             if travel_dist > dist_to_next_waypoint {
@@ -252,7 +254,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                         coordinates_current: boat.location.unwrap(),
                         coordinates_final: coordinates_final,
                         cargo_on_board: Some(boat.cargo_current),
-                        velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
+                        velocity: Some(PhysVec::new(boat.velocity_mean.expect("Missing vessel mean velocity"), boat.heading.expect("Missing vessel heading"))),
                         course: None,
                         heading: boat.heading,
                         track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
@@ -279,7 +281,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                 let bearing = Haversine.bearing(boat.location.unwrap(), next_waypoint);
 
                 // Get the new location of the boat with distance left to travel during timestep and bearing to next waypoint
-                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist.get::<uom::si::length::meter>()); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
+                let new_location: geo::Point = Haversine.destination(boat.location.unwrap(), bearing, travel_dist); // travel_dist in meters, https://docs.rs/geo/0.30.0/geo/algorithm/line_measures/metric_spaces/struct.HaversineMeasure.html#method.destination
 
                 // Update the location of the boat
                 boat.location = Some(new_location);
@@ -291,7 +293,7 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
                     coordinates_current: boat.location.unwrap(),
                     coordinates_final: coordinates_final,
                     cargo_on_board: Some(boat.cargo_current),
-                    velocity: Some(PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap())),
+                    velocity: Some(PhysVec::new(boat.velocity_mean.unwrap(), boat.heading.unwrap())),
                     course: None,
                     heading: boat.heading,
                     track_angle: Some(Rhumb.bearing(boat.ship_log.last().unwrap().coordinates_current, boat.location.unwrap())),
@@ -360,8 +362,11 @@ pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: t
     // Loop through each time step
     for i in 0..simulation.max_iterations {
         // Simulate the boat moving towards the next waypoint
+        // Get next waypoint
+        let next_waypoint: geo::Point = boat.route_plan.as_ref().expect("Route plan missing?")[(boat.current_leg.unwrap()-1) as usize].p2;
+        boat.heading = Some(Haversine.bearing(boat.location.unwrap(), next_waypoint));
         // Working velocity is mean velocity plus a random standard deviation from the mean
-        working_velocity = PhysVec::new(boat.velocity_mean.unwrap().get::<uom::si::velocity::meter_per_second>() + rand::random_range(-1.0..=1.0) * boat.velocity_std.unwrap().get::<uom::si::velocity::meter_per_second>(), boat.heading.unwrap());
+        working_velocity = PhysVec::new(boat.velocity_mean.expect("Missing vessel mean velocity") + rand::random_range(-1.0..=1.0) * boat.velocity_std.expect("Missing standard deviation for vessel velocity"), boat.heading.expect("Missing vessel heading"));
 
         // Get distance traveled in time step, unit [m]
         travel_dist = working_velocity.magnitude * simulation.time_step.as_seconds_f64();

@@ -14,9 +14,9 @@ use crate::*;   // To use everything from the crate
 pub struct SailingLeg {
     pub p1: geo::Point,
     pub p2: geo::Point,
-    /// Tacking width in [m]
+    /// Tacking width in \[m\]
     pub tacking_width: f64,
-    /// The minimum proximity in [m] to p2 to consider the vessel "at p2"
+    /// The minimum proximity in \[m\] to p2 to consider the vessel "at p2"
     pub min_proximity: f64
 }
 
@@ -26,21 +26,32 @@ pub struct SailingLeg {
 #[derive(Debug)]
 pub struct ShipLogEntry {
     pub timestamp: time::UtcDateTime,
+    /// The initial coordinates of the voyage, not the leg
     pub coordinates_initial: geo::Point,
+    /// The coordinates of the vessel at the time of the ShipLogEntry
     pub coordinates_current: geo::Point,
+    /// The final coordinates of the voyage, not the leg
     pub coordinates_final: geo::Point,
+    /// How much cargo is on board at the time of the log entry
     pub cargo_on_board: Option<uom::si::f64::Mass>,
-    pub velocity: Option<PhysVec>,  // Current velocity of the boat
-    pub course: Option<f64>,  // Rhumb line course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
-    pub heading: Option<f64>,  // Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
-    pub track_angle: Option<f64>,   // The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°
-    pub true_bearing: Option<f64>,  // True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
-    pub draft: Option<uom::si::f64::Length>,  // draft of the boat at the time of the log entry
-    pub navigation_status: Option<NavigationStatus>,  // Navigation status of the boat at the time of the log entry
+    /// Current velocity of the boat
+    pub velocity: Option<PhysVec>,
+    /// Rhumb line course over from initial coordinates to final coordinates in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub course: Option<f64>,
+    /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub heading: Option<f64>,
+    /// The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°
+    pub track_angle: Option<f64>,
+    /// True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
+    pub true_bearing: Option<f64>,
+    /// draft of the boat at the time of the log entry
+    pub draft: Option<uom::si::f64::Length>,
+    /// Navigation status of the boat at the time of the log entry
+    pub navigation_status: Option<NavigationStatus>,
 }
 
 /// Navigational status of the vessel based on the AIS navigation status codes
-/// See: https://support.marinetraffic.com/en/articles/9552867-what-is-the-significance-of-the-ais-navigational-status-values
+/// See: <https://support.marinetraffic.com/en/articles/9552867-what-is-the-significance-of-the-ais-navigational-status-values>
 #[derive(Debug, Copy, Clone)]
 #[repr(u64)]
     pub enum NavigationStatus {
@@ -137,6 +148,7 @@ pub struct Boat {
     pub min_angle_of_attack: Option<f64>,
     pub name: Option<String>,
     pub navigation_status: Option<NavigationStatus>,
+    /// Note that for evaluating the route plan then the minimum proximity of the final point of the roue plan must be zero
     pub route_plan: Option<Vec<SailingLeg>>,
     pub rudder: Option<Rudder>,
     pub sail: Option<Sail>,
@@ -147,10 +159,10 @@ pub struct Boat {
     pub true_bearing: Option<f64>,
     /// Current velocity of the boat with magnitude and direction
     pub velocity_current: Option<PhysVec>,
-    /// The average velocity of the boat, only magnitude
-    pub velocity_mean: Option<uom::si::f64::Velocity>,
+    /// The average velocity of the boat, only magnitude, take care of your units. Good practice to use the same velocity units everywhere, \[m/s\] recommended.
+    pub velocity_mean: Option<f64>,
     /// The standard deviation of the velocity of the boat, only magnitude
-    pub velocity_std: Option<uom::si::f64::Velocity>,
+    pub velocity_std: Option<f64>,
     pub width: Option<uom::si::f64::Length>,
     /// Preferred side of the boat for the wind to hit
     pub wind_preferred_side: VesselSide,

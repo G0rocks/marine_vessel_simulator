@@ -7,7 +7,6 @@
 
 /// External crates
 use csv; // CSV reader to read csv files
-use uom::{self};    // Units of measurement. Makes sure that the correct units are used for every calculation
 use geo::{self, Haversine, Rhumb, Bearing, Distance, Destination};    // Geographical calculations. Used to calculate the distance between two coordinates and bearings
 use year_helper; // Year helper to calculate the number of days in a year based on the month and if it's a leap year or not
 use std::{io, fmt, f64::consts, fs::File, io::Write}; // To use errors, formatting, constants, write to file
@@ -129,10 +128,10 @@ impl std::ops::Sub for PhysVec {
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 /// ```
 pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
-    (uom::si::f64::Velocity, uom::si::f64::Velocity,
-        Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>,
-        time::Duration, time::Duration,
-        uom::si::f64::Length, uom::si::f64::Length, u64) {
+    (Option<f64>, Option<f64>,
+        Option<f64>, Option<f64>,
+        Option<time::Duration>, Option<time::Duration>,
+        Option<f64>, Option<f64>, u64) {
 
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
@@ -143,9 +142,9 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
         .expect("Failed to open the file");
 
     // Initialize variables to store the sum and count of speed and cargo values
-    let mut speed_vec: Vec<uom::si::f64::Velocity> = Vec::new();
-    let mut cargo_vec: Vec<Option<uom::si::f64::Mass>> = Vec::new();
-    let mut dist_vec: Vec<uom::si::f64::Length> = Vec::new();
+    let mut speed_vec: Vec<f64> = Vec::new();
+    let mut cargo_vec: Vec<f64> = Vec::new();
+    let mut dist_vec: Vec<f64> = Vec::new();
     let mut travel_time_vec: Vec<time::Duration> = Vec::new();
 
     // Init empty csv column variable
@@ -153,14 +152,15 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     let mut coordinates_initial: geo::Point;
     let mut coordinates_current: geo::Point;
     let mut coordinates_final: geo::Point;
-    let mut cargo_on_board_option: Option<uom::si::f64::Mass>;         // weight in tons
+    let mut cargo_on_board_option: Option<f64>;         // weight in tons
 
     // Init empty working variables
-    let mut dist;
-    let mut trip_dist: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+    // Distances are in meters
+    let mut dist: f64;
+    let mut trip_dist: f64 = 0.0;
     let mut last_timestamp = time::UtcDateTime::now();
     let mut start_time = time::UtcDateTime::now();
-    let mut cargo_on_trip: Option<uom::si::f64::Mass> = None;
+    let mut cargo_on_trip: Option<f64> = None;
     let mut num_trips: u64 = 0;
     let mut coordinates_last: geo::Point = geo::Point::new(0.0, 0.0);
 
@@ -173,7 +173,10 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
                 coordinates_current = string_to_point(log_entry.get(2).expect("No initial coordinate found").to_string());
                 coordinates_final = string_to_point(log_entry.get(3).expect("No initial coordinate found").to_string());
-                cargo_on_board_option = string_to_tons(log_entry.get(4).unwrap().to_string());
+                cargo_on_board_option = match log_entry.get(4).unwrap().to_string().parse() {
+                    Ok(cargo) => Some(cargo),
+                    Err(_) => None,
+                };
 
                 // If initial coordinate, the trip just started
                 if coordinates_current == coordinates_initial {
@@ -188,16 +191,11 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                 // Else then it's a working point or the endpoint and we can calculate the distance
                 else {
                     // Add the distance traveled from last coordinates
-                    dist = haversine_distance_uom_units(coordinates_last, coordinates_current);
+                    dist = Haversine.distance(coordinates_last, coordinates_current);
                     // Update trip distance
                     trip_dist += dist;
-                    // Calculate the speed
-                    let speed = dist / uom::si::f64::Time::new::<uom::si::time::second>((timestamp - last_timestamp).as_seconds_f64() as f64);
-
-                    // TODO remove debug messages:
-                    // println!("dist: {:?}", dist);
-                    // println!("Time elapsed: {}", timestamp - last_timestamp);
-                    // println!("Speed: {:?}", speed);
+                    // Calculate the speed in m/s
+                    let speed = dist / (timestamp - last_timestamp).as_seconds_f64();
 
                     // Update last_timestamp
                     last_timestamp = timestamp;
@@ -226,11 +224,11 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
                     dist_vec.push(trip_dist);
                     // If there is cargo, Add cargo to cargo vector
                     if cargo_on_trip.is_some() {
-                        cargo_vec.push(cargo_on_trip);
+                        cargo_vec.push(cargo_on_trip.unwrap());
                     }
                      
                     // Reset trip distance distance
-                    trip_dist = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+                    trip_dist = 0.0;
                     // Reset cargo
                     cargo_on_trip = None;
                 }
@@ -243,30 +241,30 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
     }
 
     // Calculate the mean and standard deviation of the vectors
-    let speed_mean: uom::si::f64::Velocity;
-    let speed_std: uom::si::f64::Velocity;
-    let cargo_mean: Option<uom::si::f64::Mass>;
-    let cargo_std: Option<uom::si::f64::Mass>;
-    let travel_time_mean: time::Duration;
-    let travel_time_std: time::Duration;
-    let dist_mean: uom::si::f64::Length;
-    let dist_std: uom::si::f64::Length;
+    let speed_mean: Option<f64>;
+    let speed_std: Option<f64>;
+    let cargo_mean: Option<f64>;
+    let cargo_std: Option<f64>;
+    let travel_time_mean: Option<time::Duration>;
+    let travel_time_std: Option<time::Duration>;
+    let dist_mean: Option<f64>;
+    let dist_std: Option<f64>;
 
-    match get_speed_mean_and_std(&speed_vec) {
+    match get_vec_f64_mean_and_std(&speed_vec) {
         Ok((mean, std)) => {
-            speed_mean = mean;
-            speed_std = std;
+            speed_mean = Some(mean);
+            speed_std = Some(std);
         },
         Err(_) => {
             // eprintln!("Error calculating speed mean and std. Set to zero. Error message: {}", e);
-            speed_mean = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
-            speed_std = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
+            speed_mean = None;
+            speed_std = None;
         }
     }
-    match get_weight_mean_and_std(&cargo_vec) {
+    match get_vec_f64_mean_and_std(&cargo_vec) {
         Ok((mean, std)) => {
-            cargo_mean = mean;
-            cargo_std = std;
+            cargo_mean = Some(mean);
+            cargo_std = Some(std);
         },
         Err(_) => {
             // eprintln!("Error calculating cargo mean and std. Set to None. Error message: {}", e);
@@ -274,26 +272,31 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
             cargo_std = None;
         }
     }
-    match get_duration_mean_and_std(&travel_time_vec) {
+
+    // Parse travel_time_vec to travel_time_vec_secs
+    let travel_time_vec_secs = travel_time_vec.iter().map(|d| d.as_seconds_f64()).collect::<Vec<f64>>();
+    match get_vec_f64_mean_and_std(&travel_time_vec_secs) {
         Ok((mean, std)) => {
-            travel_time_mean = mean;
-            travel_time_std = std;
+            let mean_secs = mean as i64;
+            travel_time_mean = Some(time::Duration::new(mean_secs, ((mean - mean_secs as f64)*1000000000.0) as i32));
+            let std_secs = std as i64;
+            travel_time_std = Some(time::Duration::new(std_secs, ((std - std_secs as f64)*1000000000.0) as i32));
         },
         Err(e) => {
             eprintln!("Error calculating travel time mean and std. Set to zero. Error message: {}", e);
-            travel_time_mean = time::Duration::new(0,0);
-            travel_time_std = time::Duration::new(0,0);
+            travel_time_mean = None;
+            travel_time_std = None;
         }
     }
-    match get_distance_mean_and_std(&dist_vec) {
+    match get_vec_f64_mean_and_std(&dist_vec) {
         Ok((mean, std)) => {
-            dist_mean = mean;
-            dist_std = std;
+            dist_mean = Some(mean);
+            dist_std = Some(std);
         },
         Err(e) => {
             eprintln!("Error calculating distance mean and std. Set to zero. Error message: {}", e);
-            dist_mean = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
-            dist_std = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
+            dist_mean = None;
+            dist_std = None;
         }
     }
     // Return the values
@@ -306,13 +309,13 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str) ->
 /// csv_file_path must end with ".csv"
 /// names is the first column of the csv file and will help indicate what the statistics are for.
 /// All vectors must have the same length
-pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&str>, speed_mean_vec: Vec<uom::si::f64::Velocity>, speed_std_vec: Vec<uom::si::f64::Velocity>, cargo_mean_vec: Vec<Option<uom::si::f64::Mass>>, cargo_std_vec: Vec<Option<uom::si::f64::Mass>>, travel_time_mean_vec: Vec<time::Duration>, travel_time_std_vec: Vec<time::Duration>, dist_mean_vec: Vec<uom::si::f64::Length>, dist_std_vec: Vec<uom::si::f64::Length>, num_trips_vec: Vec<u64>) -> Result<String, io::Error> {
+/// Returns mean distance in kilometers and distance standard deviation in meters
+pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&str>, speed_mean_vec: Vec<Option<f64>>, speed_std_vec: Vec<Option<f64>>, cargo_mean_vec: Vec<Option<f64>>, cargo_std_vec: Vec<Option<f64>>, travel_time_mean_vec: Vec<Option<time::Duration>>, travel_time_std_vec: Vec<Option<time::Duration>>, dist_mean_vec: Vec<Option<f64>>, dist_std_vec: Vec<Option<f64>>, num_trips_vec: Vec<u64>) -> Result<String, io::Error> {
     // Check if csv_file_path ends with ".csv"
     let num_chars = csv_file_path.chars().count();
     if &csv_file_path[(num_chars-4)..] != ".csv" {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "The filepath must end with \".csv\""));
     }
-
 
     // Check if vectors are the same size
     let vec_size = name_vec.len();
@@ -334,27 +337,27 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
         // Get name
         let name = name_vec[i];
         // Get speed_mean
-        let speed_mean = &speed_mean_vec[i].get::<uom::si::velocity::meter_per_second>().to_string();
+        let speed_mean = &speed_mean_vec[i].unwrap().to_string();
         // Get speed_std
-        let speed_std = &speed_std_vec[i].get::<uom::si::velocity::meter_per_second>().to_string();
+        let speed_std = &speed_std_vec[i].unwrap().to_string();
         // Get cargo_mean, if None, set to empty string
         let cargo_mean = &match cargo_mean_vec[i] {
-            Some(c) => c.get::<uom::si::mass::ton>().to_string(),
+            Some(c) => c.to_string(),
             None => String::from(""),
         };
         // Get cargo_std, if None, set to empty string
         let cargo_std = &match cargo_std_vec[i] {
-            Some(c) => c.get::<uom::si::mass::ton>().to_string(),
+            Some(c) => c.to_string(),
             None => String::from(""),
         };
         // Get travel_time_mean
-        let travel_time_mean = &travel_time_mean_vec[i].to_string();
+        let travel_time_mean = &travel_time_mean_vec[i].unwrap().to_string();
         // Get travel_time_std
-        let travel_time_std = &travel_time_std_vec[i].to_string();
-        // Get dist_mean
-        let dist_mean = &dist_mean_vec[i].get::<uom::si::length::kilometer>().to_string();
-        // Get dist_std
-        let dist_std = &dist_std_vec[i].get::<uom::si::length::meter>().to_string();
+        let travel_time_std = &travel_time_std_vec[i].unwrap().to_string();
+        // Get dist_mean in kilometers
+        let dist_mean = &(dist_mean_vec[i].unwrap()/1000.0).to_string();
+        // Get dist_std in meters
+        let dist_std = &dist_std_vec[i].unwrap().to_string();
         // Get num_trips
         let num_trips = &num_trips_vec[i].to_string();
 
@@ -726,7 +729,7 @@ pub fn string_to_point(coord_string: String) -> geo::Point {
     if coord_str_vec.len() != 2 {
         panic!("Invalid coordinate format");
     }
-        
+
     // Parse the latitude and longitude as f64
     let mut latitude: f64 = coord_str_vec[0].trim().parse::<f64>().expect("Invalid latitude");
     let mut longitude: f64 = coord_str_vec[1].trim().parse::<f64>().expect("Invalid longitude");
@@ -787,11 +790,11 @@ pub fn get_min_point_to_great_circle_dist(p1: geo::Point, p2: geo::Point, p3: ge
     return d;
 }
 
-/// Converts a string into a uom::si::f64::Mass object
+/// Converts a string into a f64 object
 /// cargo_string: The string to convert, must be in metric tons (1 metric ton = 1000 kg)
 /// # Example:
-/// `let my_tons: uom::si::f64::Mass = string_to_tons("500.3");`
-pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
+/// `let my_tons: f64 = string_to_tons("500.3");`
+pub fn string_to_tons(cargo_string: String) -> Option<f64> {
     // Remove all spaces in string
     let cargo_str: &str = (&cargo_string[..]).trim();
     
@@ -803,119 +806,58 @@ pub fn string_to_tons(cargo_string: String) -> Option<uom::si::f64::Mass> {
     // Parse the cargo as f64
     let cargo: f64 = cargo_str.parse::<f64>().expect("Invalid cargo");
 
-    // Make return value
-    let return_cargo: Option<uom::si::f64::Mass> = Some(uom::si::f64::Mass::new::<uom::si::mass::ton>(cargo));
-    return return_cargo;
+    // return cargo
+    return Some(cargo);
 }
 
-/// Returns the average and standard deviation of a vector of uom::si::f64::Velocity objects
-/// speed_vec: The vector of uom::si::f64::Velocity objects
+/// Returns the average and standard deviation of all values in a vector of f64 objects
+/// data_vec: The vector of f64 objects
 /// # Example:
-/// `let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);`
-pub fn get_speed_mean_and_std(speed_vec: &Vec<uom::si::f64::Velocity>) ->
-    Result<(uom::si::f64::Velocity, uom::si::f64::Velocity), io::Error> {
-    // Validate that the speed_vec has at least 1 value
-    if speed_vec.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Speed vector is empty, cannot calculate mean and standard deviation"));
-    }
-    
-    // Calculate the mean of the speed vector
-    let mut tot_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(0.0);
-
-    // loop through vector, add all values to tot_speed
-    for speed in speed_vec {
-        tot_speed = tot_speed + *speed;
-    }
-    // Find mean
-    let speed_mean: uom::si::f64::Velocity = tot_speed / speed_vec.len() as f64;
-    let speed_mean_f64: f64 = speed_mean.get::<uom::si::velocity::meter_per_second>();
-
-    // TODO remove debug messages
-    // println!("Total speed: {:?}", tot_speed);
-    // println!("speed vec length: {}", speed_vec.len());
-    // println!("Mean speed: {:?}", speed_mean);
-    // println!("speed vec: {:?}", speed_vec);
-
-
-
-    // Calculate the standard deviation of the speed vector
-    let mut variance: f64 = 0.0;
-
-    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
-    for speed in speed_vec {
-        variance = variance + (speed.get::<uom::si::velocity::meter_per_second>() - speed_mean_f64).powi(2);
-    }
-    variance = variance / ((speed_vec.len() - 1) as f64);
-
-    // Find standard deviation from variance
-    let speed_std: uom::si::f64::Velocity = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>(variance.sqrt());
-
-    // Return the mean and standard deviation
-    return Ok((speed_mean, speed_std));
-}
-
-/// Returns the average and standard deviation of a vector of Option<uom::si::f64::Mass> objects
-/// cargo_vec: The vector of Option<uom::si::f64::Mass> objects
-/// # Example:
-/// `let (my_mean, my_std) = get_speed_mean_and_std(&my_vec);`
-pub fn get_weight_mean_and_std(weight_vec: &Vec<Option<uom::si::f64::Mass>>) ->
-    Result<(Option<uom::si::f64::Mass>, Option<uom::si::f64::Mass>), io::Error> {
-    // Validate that the vector has at least 1 value
-    if weight_vec.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Weight vector is empty, cannot calculate mean and standard deviation"));
+/// `let (my_mean, my_std) = get_vec_f64_mean_and_std(&my_vec);`
+pub fn get_vec_f64_mean_and_std(data_vec: &Vec<f64>) -> Result<(f64, f64), io::Error> {
+    // Validate that the input vector has at least 1 value
+    if data_vec.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "vector is empty, cannot calculate mean and standard deviation"));
     }
     
     // Calculate the mean of the vector
-    let mut tot_weight = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(0.0);
-    let mut counter: u64 = 0;
-    let mut useful_weight_vec: Vec<uom::si::f64::Mass> = Vec::new();
+    let mut total: f64 = 0.0;
 
-    // loop through vector, add all values to tot_weight, count how many have some value
-    for weight in  weight_vec{
-       match weight {
-            // If there is some value, add it to the total, the useful_weight_vec and count it, otherwise do nothing
-            Some(w) => {
-                tot_weight = tot_weight + *w;
-                useful_weight_vec.push(*w);
-                counter += 1;
-            }
-            None => {}
-        };
+    // loop through vector, add all values to total
+    for value in data_vec {
+        total = total + *value;
     }
-
-    // If there are no values, return None
-    if counter == 0 {
-        return Ok((None, None));
-    }
-
     // Find mean
-    let weight_mean: uom::si::f64::Mass = tot_weight / counter as f64;
-    let weight_mean_f64: f64 = weight_mean.get::<uom::si::mass::kilogram>();
+    let vec_mean: f64 = total / data_vec.len() as f64;
 
     // Calculate the standard deviation of the speed vector
     let mut variance: f64 = 0.0;
 
     // loop through vector, add all values to variance, then divide by number of values -1 to create variance
-    for weight in useful_weight_vec {
-        variance = variance + (weight.get::<uom::si::mass::kilogram>() - weight_mean_f64).powi(2);
+    for value in data_vec {
+        variance = variance + (value - vec_mean).powi(2);
     }
-    variance = variance / ((counter - 1) as f64);
+    variance = variance / ((data_vec.len() - 1) as f64);
 
     // Find standard deviation from variance
-    let weight_std: uom::si::f64::Mass = uom::si::f64::Mass::new::<uom::si::mass::kilogram>(variance.sqrt());
+    let vec_std: f64 = variance.sqrt();
 
     // Return the mean and standard deviation
-    return Ok((Some(weight_mean), Some(weight_std)));
+    return Ok((vec_mean, vec_std));
 }
+
 
 /// Returns the average and standard deviation of a vector
 /// # Example:
 /// `let (my_mean, my_std) = get_time_mean_and_std(&my_vec);`
 pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
     Result<(time::Duration, time::Duration), io::Error> {
+        println!("DURATION EVALUATION THINGY: DURATION VEC: {:?}", duration_vec);
+        println!("DURATION VEC IS EMPTY?: {:?}", duration_vec.is_empty());
     // Validate that the vector has at least 1 value
     if duration_vec.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Speed vector is empty, cannot calculate mean and standard deviation"));
+        println!("DURATION VEC IS EMPTY? DOUBLE TAKE: {:?}", duration_vec.is_empty());
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Duration vector is empty, cannot calculate mean and standard deviation"));
     }
 
     // Calculate the mean of the vector
@@ -945,46 +887,11 @@ pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
     return Ok((duration_mean, duration_std));
 }
 
-/// Returns the average and standard deviation of a vector of uom::si::f64::Length objects
-/// dist_vec: The vector of uom::si::f64::Length objects
-/// # Example:
-/// `let (my_mean, my_std) = get_dist_mean_and_std(&my_vec);`
-pub fn get_distance_mean_and_std(dist_vec: &Vec<uom::si::f64::Length>) -> Result<(uom::si::f64::Length, uom::si::f64::Length), io::Error> {
-    // Validate that the vector has at least 1 value
-    if dist_vec.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Distance vector is empty, cannot calculate mean and standard deviation"));
-    }
-    // Calculate the mean of the vector
-    let mut total = uom::si::f64::Length::new::<uom::si::length::meter>(0.0);
-
-    // loop through vector, add all values to the total
-    for dist in dist_vec {
-        total = total + *dist;
-    }
-    // Find mean
-    let mean: uom::si::f64::Length = total / dist_vec.len() as f64;
-    let mean_f64: f64 = mean.get::<uom::si::length::meter>();
-
-    // Calculate the standard deviation of the vector
-    let mut variance: f64 = 0.0;
-
-    // loop through vector, add all values to variance, then divide by number of values -1 to create variance
-    for dist in dist_vec {
-        variance = variance + (dist.get::<uom::si::length::meter>() - mean_f64).powi(2);
-    }
-    variance = variance / ((dist_vec.len() - 1) as f64);
-
-    // Find standard deviation from variance
-    let std: uom::si::f64::Length = uom::si::f64::Length::new::<uom::si::length::meter>(variance.sqrt());
-
-    // Return the mean and standard deviation
-    return Ok((mean, std));
-}
 
 /// Loads route plan from a CSV file
 /// Returns a vector of SailingLeg objects where each entry is a a leg of the trip
 /// The CSV file is expected to have the following columns in order but the header names are not important:
-/// Leg number;start_latitude;start_longitude;end_latitude;end_longitude;tacking_width[meters]
+/// Leg number;start_latitude;start_longitude;end_latitude;end_longitude;tacking_width\[meters\]
 /// The delimiter is a semicolon.
 /// file_path: Path to the CSV file
 /// # Example:
@@ -1420,7 +1327,7 @@ pub fn get_weather_data_from_csv_file(path_to_file: String) -> (Vec<UtcDateTime>
         .delimiter(b';')
         .has_headers(true)
         .from_path(path_to_file.clone())
-        .expect(format!("Failed to open file: {}", path_to_file.as_str()).as_str());
+        .expect(format!("Failed to open file: {}\n", path_to_file.as_str()).as_str());
 
     // Initialize return vectors
     let mut timestamps: Vec<UtcDateTime> = Vec::new();
