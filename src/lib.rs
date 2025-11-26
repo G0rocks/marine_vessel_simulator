@@ -139,7 +139,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
         .has_headers(true)
         .flexible(true)
         .from_path(file_path)
-        .expect("Failed to open the file");
+        .expect(format!("Failed to open file: {}", file_path).as_str());
 
     // Initialize variables to store the sum and count of speed and cargo values
     let mut speed_vec: Vec<f64> = Vec::new();
@@ -731,8 +731,8 @@ pub fn string_to_point(coord_string: String) -> geo::Point {
     }
 
     // Parse the latitude and longitude as f64
-    let mut latitude: f64 = coord_str_vec[0].trim().parse::<f64>().expect("Invalid latitude");
-    let mut longitude: f64 = coord_str_vec[1].trim().parse::<f64>().expect("Invalid longitude");
+    let mut latitude: f64 = coord_str_vec[0].trim().parse::<f64>().expect(format!("Invalid latitude: {:?}", coord_str_vec).as_str());
+    let mut longitude: f64 = coord_str_vec[1].trim().parse::<f64>().expect(format!("Invalid longitude: {:?}", coord_str_vec).as_str());
 
     // Make sure longitude is between -180° and 360°
     while longitude < -180.0 {
