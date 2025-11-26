@@ -129,23 +129,28 @@ impl VesselSide {
 /// Struct to hold boat metadata
 /// All fields are optional, so that the struct can be created without knowing all the values
 pub struct Boat {
+    /// The vessels maximum cargo storage capacity (by weight)
     pub cargo_max_capacity: Option<uom::si::f64::Mass>,
     pub cargo_current: uom::si::f64::Mass,
     pub cargo_mean: Option<uom::si::f64::Mass>,
     pub cargo_std: Option<uom::si::f64::Mass>,
     pub current_leg: Option<u32>,
     pub destination: Option<geo::Point>,
+    /// The draft (a.k.a draught) of the vessel
     pub draft: Option<uom::si::f64::Length>,
     /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub heading: Option<f64>,
     /// Coefficient of drag for the hull
     pub hull_drag_coefficient: Option<f64>,
+    /// The IMO number of the vessel
     pub imo: Option<u32>,
+    /// The length of the vessel
     pub length: Option<uom::si::f64::Length>,
     pub location: Option<geo::Point>,
     /// Mass of the boat without cargo or fuel (a.k.a dry weight)
     pub mass: Option<uom::si::f64::Mass>,
     pub min_angle_of_attack: Option<f64>,
+    /// The name of the vessel
     pub name: Option<String>,
     pub navigation_status: Option<NavigationStatus>,
     /// Note that for evaluating the route plan then the minimum proximity of the final point of the roue plan must be zero
@@ -163,9 +168,12 @@ pub struct Boat {
     pub velocity_mean: Option<f64>,
     /// The standard deviation of the velocity of the boat, only magnitude
     pub velocity_std: Option<f64>,
+    /// The width of the vessel
     pub width: Option<uom::si::f64::Length>,
     /// Preferred side of the boat for the wind to hit
     pub wind_preferred_side: VesselSide,
+    /// Multiplier for the wind velocity to simulate different sail efficiencies. When simulating, the velocity of the vessel in the vessels heading will be the wind velocity multiplied by this multiplier. Note that ocean currents can also impact vessel velocity.
+    pub wind_velocity_multiplier: Option<f64>,
 }
 
 // Implementation of the Boat struct
@@ -173,6 +181,7 @@ pub struct Boat {
 impl Boat {
     /// Creates a new Boat instance with mostly None in the fields, though some fields have default values
     /// Make sure to set the values you need to use to the correct values 
+    /// Defaults all to None except cargo_current to zero, ship_log to an empty vector, time_now to UtcDateTime::now(), wind_preferred_side to starboard since then we have the right of way in most cases.
     pub fn new() -> Boat {
         Boat {
             cargo_current: uom::si::f64::Mass::new::<uom::si::mass::ton>(0.0),
