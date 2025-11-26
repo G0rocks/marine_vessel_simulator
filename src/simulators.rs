@@ -478,6 +478,9 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
     }
+    if boat.wind_velocity_multiplier.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing wind_velocity_multiplier from vessel"));
+    }
     // TODO: Add drag
     // if boat.hull_drag_coefficient.is_none() {
     //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
@@ -704,7 +707,7 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
 
         // Working velocity is initial velocity plus final velocity divided by 2
         // TODO: implement properly
-        working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap()) + ocean_current;
+        working_velocity = PhysVec::new(wind.magnitude*boat.wind_velocity_multiplier.unwrap(), boat.heading.unwrap()) + ocean_current;
         // working_velocity = PhysVec::new(wind.magnitude*1.5, boat.heading.unwrap());
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
@@ -830,6 +833,9 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
     if boat.route_plan.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing route plan from boat"));
     }
+    if boat.wind_velocity_multiplier.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing wind_velocity_multiplier from vessel"));
+    }
     // TODO: Add drag
     // if boat.hull_drag_coefficient.is_none() {
     //     return Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing drag coefficient from boat"));
@@ -869,7 +875,7 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
         
         // Calculate time it would take to sail to next point, add to boats time
         // Get working velocity
-        boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude, boat.heading.unwrap()));
+        boat.velocity_current = Some(PhysVec::new(wind_vec[i].magnitude*boat.wind_velocity_multiplier.unwrap(), boat.heading.unwrap()));
         // If there's ocean current, add that to boats velocity
         if ocean_current_vec[i].is_some() {
             boat.velocity_current = Some(boat.velocity_current.unwrap() + ocean_current_vec[i].unwrap());

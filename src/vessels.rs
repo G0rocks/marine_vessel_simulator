@@ -201,7 +201,8 @@ impl Boat {
             velocity_mean: None,
             velocity_std: None,
             width: None,
-            wind_preferred_side: VesselSide::Starboard,  // Default to starboard since then we have the right of way in most cases
+            wind_preferred_side: VesselSide::Starboard,
+            wind_velocity_multiplier: None,
         }
     }
 
