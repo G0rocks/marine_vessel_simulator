@@ -1222,7 +1222,9 @@ pub fn get_weather_data_for_points(points: Vec<geo::Point>, timestamp: UtcDateTi
             Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
         };
         // let ocean_current_data = match copernicus.get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
-        let ocean_current_data = match copernicus.get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(1.0), Some(1.0)){
+        // let ocean_current_data = match copernicus.get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(0.49402499198913574), Some(0.49402499198913574)){
+        // let ocean_current_data = match copernicus.get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(0.0), Some(50.0)){
+        let ocean_current_data = match copernicus.get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, points[i].x(), points[i].x(), points[i].y(), points[i].y(), Some(0.0), Some(1.0)){
             Ok(o) => o,
             Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
         };

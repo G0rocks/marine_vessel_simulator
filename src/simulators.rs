@@ -634,7 +634,9 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
             Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
         };
         // let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i".to_string(), vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
-        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
+        // let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(1.0), Some(1.0)){
+        // let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(0.49402499198913574), Some(0.49402499198913574)){
+        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, Some(0.0), Some(1.0)){
             Ok(o) => o,
             Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
         };
