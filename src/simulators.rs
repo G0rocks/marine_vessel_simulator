@@ -316,7 +316,6 @@ pub fn sim_waypoint_mission_constant_velocity(boat: &mut Boat, start_time: time:
     return Ok("Maximized number of iterations. Stopping simulation".to_string());
 }
 
-
 /// Simulates the boat using mean and standard deviation velocity (uses boat.mean_velocity and boat.std_velocity)
 pub fn sim_waypoint_mission_mean_and_std_velocity(boat: &mut Boat, start_time: time::UtcDateTime, simulation: &Simulation) -> Result<String, io::Error> {
     // Verify that boat has mean and std velocity set
@@ -803,9 +802,6 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
     // Return the ship log TODO: Move inside for loop
     return Ok("Maximized number of iterations. Stopping simulation".to_string());
 }
-
-
-
 
 /// Simulates the boat quickly using 1 download of weather data from copernicus marine
 /// Downloads the 

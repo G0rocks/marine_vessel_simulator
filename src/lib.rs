@@ -381,7 +381,6 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
     return Ok(("Saved shipping log statistics to csv file").to_string());
 }
 
-
 /// Visualize ship logs with plotly on map
 /// figure_file_path: Option<&str> - Path to the file where the figure will be saved. If None, the figure will not be saved to a file.
 pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, figure_file_path: Option<&str>) -> Result<(), io::Error> {
@@ -951,7 +950,7 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
 /// The cargo is in metric tons (1 metric ton = 1000 kg)
 /// csv_file_path: Path to the CSV file
 /// boat: The boat object containing the ship logs
-/// Note: The csv file delimieter is a semicolon
+/// Note: The csv file delimiter is a semicolon
 pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Error> {
     // Create a CSV writer with a semicolon delimiter
     // let mut wtr = csv::WriterBuilder::new().delimiter(b';').from_path(csv_file_path)?;
@@ -1024,7 +1023,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
 
         // If draught is None, set to empty string
         let draft = match entry.draft {
-            Some(d) => d.get::<uom::si::length::meter>().to_string(),
+            Some(d) => d.to_string(),
             None => String::from(""),
         };
 
@@ -1053,6 +1052,111 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
     // Flush and close the writer
     wtr.flush()?;
     Ok(())
+}
+
+/// The reciprocal function to ship_logs_to_csv takes a csv file and returns the ship logs.
+/// Function that writes the ship logs to a CSV file with the following columns:
+/// timestamp;coordinates_initial;coordinates_current;coordinates_final;cargo_on_board
+/// Note that the coordinates are in the format of ISO 6709 using decimal places with a comma between latitude and longitude. "latitude,longitude" (e.g., "52.5200,13.4050")
+/// The cargo is considered to be in metric tons (1 metric ton = 1000 kg)
+/// csv_file_path: Path to the CSV file
+/// boat: The boat object containing the ship logs
+/// Note: The csv file delimiter is a semicolon
+/// Note: It is assumed that the course over ground is specified in 10 times the degrees. That is 3593 degrees course in the csv file are 359.3 degrees 
+pub fn csv_to_ship_log(csv_file_path: &str) -> Result<Vec<ShipLogEntry>, io::Error> {
+    // Check if the file ends with ".csv" and if it does not return an error
+    if csv_file_path.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>() != ".csv" {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("File path does not end with .csv\nFile: {:?}", csv_file_path)));
+    }
+ 
+    // Init empty Ship Log book
+    let mut ship_log = vec![];
+
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(csv_file_path)
+        .expect(format!("Failed to open file: {}\n", csv_file_path).as_str());
+
+    // Loop through all lines of file, append each line to the ship log
+    for result in csv_reader.records() {
+        match result {
+            Ok(entry) => {
+                let timestamp = string_to_utc_date_time(entry.get(0).unwrap().to_owned());
+                let coordinates_initial = geo::Point::new(
+                    entry.get(1).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
+                    entry.get(1).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                );
+                let coordinates_current = geo::Point::new(
+                    entry.get(2).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
+                    entry.get(2).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                );
+                let coordinates_final = geo::Point::new(
+                    entry.get(3).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
+                    entry.get(3).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                );
+                // If there is no cargo written down, set to None
+                let cargo_on_board = match entry.get(4).unwrap() {
+                    "" => None,
+                    cargo => Some(uom::si::f64::Mass::new::<uom::si::mass::ton>(cargo.parse::<f64>().unwrap())),
+                };
+                // If no course written down, set to None
+                let course = match entry.get(6).unwrap() {
+                    "" => None,
+                    course => Some(course.parse::<f64>().unwrap()/10.0),
+                };
+                let velocity = Some(PhysVec::new(entry.get(5).unwrap().parse::<f64>().unwrap(), course.expect("Unknown course over ground when parsing velocity from ship log csv file")));
+                let heading = Some(entry.get(7).unwrap().parse::<f64>().unwrap());
+                // Track angle is between last and current ship log entry, if this is the first entry, set to None
+                let track_angle = match ship_log.len() {
+                    0 => None,
+                    _ => {
+                        let last_entry: &ShipLogEntry = ship_log.last().unwrap();
+                        let last_coords: geo::Point = last_entry.coordinates_current;
+                        let curr_coords: geo::Point = coordinates_current;
+                        Some(geo::Haversine.bearing(last_coords, curr_coords))
+                    }
+                };
+                // If no true_bearing written down, set to None
+                let true_bearing = match entry.get(8).unwrap() {
+                    "" => None,
+                    bearing => Some(bearing.parse::<f64>().unwrap()),
+                };
+                // If no draft written doen, set to None
+                let draft = match entry.get(9).unwrap() {
+                    "" => None,
+                    draft => Some(draft.parse::<f64>().unwrap()),
+                };
+                let navigation_status: Option<NavigationStatus> = match NavigationStatus::try_from(entry.get(10).unwrap().parse::<u8>().unwrap()) {
+                    Ok(status) => Some(status),
+                    Err(_) => None,                    
+                }; //Some(entry.get(10).map(|s| s.parse::<u8>().expect("Failed to parse navigation status")).expect("Failed to parse navigation status"));
+
+                ship_log.push(
+                    ShipLogEntry {
+                        timestamp,
+                        coordinates_initial,
+                        coordinates_current,
+                        coordinates_final,
+                        cargo_on_board,
+                        velocity,
+                        course,
+                        heading,
+                        track_angle,
+                        true_bearing,
+                        draft,
+                        navigation_status,
+                    });
+                }
+            Err(err) => {
+                eprintln!("Error reading ship log entry: {}", err);
+                }
+            }
+        }
+
+    // Return ship log
+    return Ok(ship_log);
 }
 
 /// Function that translates coordinates to x,y values between 0 and 1 for plotting

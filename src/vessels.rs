@@ -40,12 +40,12 @@ pub struct ShipLogEntry {
     pub course: Option<f64>,
     /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub heading: Option<f64>,
-    /// The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°
+    /// The angle, in degrees, from the last ShipLogEntry to the current location. North: 0°, East: 90°, South: 180°, West: 270°, if first entry, should be None
     pub track_angle: Option<f64>,
     /// True bearing from vessel to coordinates_final in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub true_bearing: Option<f64>,
-    /// draft of the boat at the time of the log entry
-    pub draft: Option<uom::si::f64::Length>,
+    /// draft of the boat at the time of the log entry in meters
+    pub draft: Option<f64>,
     /// Navigation status of the boat at the time of the log entry
     pub navigation_status: Option<NavigationStatus>,
 }
@@ -64,6 +64,26 @@ pub struct ShipLogEntry {
     Aground                     = 6,
     EngagedInFishing            = 7,
     UnderwaySailing             = 8,
+}
+
+
+impl TryFrom<u8> for NavigationStatus {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(NavigationStatus::UnderwayUsingEngine),
+            1 => Ok(NavigationStatus::AtAnchor),
+            2 => Ok(NavigationStatus::NotUnderCommand),
+            3 => Ok(NavigationStatus::RestrictedManeuverability),
+            4 => Ok(NavigationStatus::ConstrainedByDraft),
+            5 => Ok(NavigationStatus::Moored),
+            6 => Ok(NavigationStatus::Aground),
+            7 => Ok(NavigationStatus::EngagedInFishing),
+            8 => Ok(NavigationStatus::UnderwaySailing),
+            _ => Err(()),
+        }
+    }
 }
 
 /// Struct to represent a sail
@@ -136,8 +156,8 @@ pub struct Boat {
     pub cargo_std: Option<uom::si::f64::Mass>,
     pub current_leg: Option<u32>,
     pub destination: Option<geo::Point>,
-    /// The draft (a.k.a draught) of the vessel
-    pub draft: Option<uom::si::f64::Length>,
+    /// The draft (a.k.a draught) of the vessel in meters
+    pub draft: Option<f64>,
     /// Heading in degrees. North: 0°, East: 90°, South: 180°, West: 270°
     pub heading: Option<f64>,
     /// Coefficient of drag for the hull
@@ -307,7 +327,7 @@ impl Boat {
 // Implementation of the ShipLogEntry struct
 //----------------------------------------------------
 impl ShipLogEntry {
-    pub fn new(timestamp: UtcDateTime, coord_initial: geo::Point, coord_current: geo::Point, coord_final: geo::Point, cargo: Option<uom::si::f64::Mass>, velocity: Option<PhysVec>, course: Option<f64>, heading: Option<f64>, track_angle: Option<f64>, true_bearing: Option<f64>, draft: Option<uom::si::f64::Length>, navigation_status: Option<NavigationStatus>) -> ShipLogEntry {
+    pub fn new(timestamp: UtcDateTime, coord_initial: geo::Point, coord_current: geo::Point, coord_final: geo::Point, cargo: Option<uom::si::f64::Mass>, velocity: Option<PhysVec>, course: Option<f64>, heading: Option<f64>, track_angle: Option<f64>, true_bearing: Option<f64>, draft: Option<f64>, navigation_status: Option<NavigationStatus>) -> ShipLogEntry {
         ShipLogEntry {
             timestamp: timestamp,
             coordinates_initial: coord_initial,
