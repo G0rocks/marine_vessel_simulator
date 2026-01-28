@@ -1085,16 +1085,16 @@ pub fn csv_to_ship_log(csv_file_path: &str) -> Result<Vec<ShipLogEntry>, io::Err
             Ok(entry) => {
                 let timestamp = string_to_utc_date_time(entry.get(0).unwrap().to_owned());
                 let coordinates_initial = geo::Point::new(
-                    entry.get(1).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
-                    entry.get(1).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                    entry.get(1).unwrap().split(',').next().unwrap().parse::<f64>().expect("Error getting initial coordinates from csv file"),
+                    entry.get(1).unwrap().split(',').nth(1).unwrap().parse::<f64>().expect("Error getting initial coordinates from csv file")
                 );
                 let coordinates_current = geo::Point::new(
-                    entry.get(2).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
-                    entry.get(2).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                    entry.get(2).unwrap().split(',').next().unwrap().parse::<f64>().expect("Error getting current coordinates from csv file"),
+                    entry.get(2).unwrap().split(',').nth(1).unwrap().parse::<f64>().expect("Error getting current coordinates from csv file")
                 );
                 let coordinates_final = geo::Point::new(
-                    entry.get(3).unwrap().split(',').next().unwrap().parse::<f64>().unwrap(),
-                    entry.get(3).unwrap().split(',').nth(1).unwrap().parse::<f64>().unwrap()
+                    entry.get(3).unwrap().split(',').next().unwrap().parse::<f64>().expect("Error getting final coordinates from csv file"),
+                    entry.get(3).unwrap().split(',').nth(1).unwrap().parse::<f64>().expect("Error getting final coordinates from csv file")
                 );
                 // If there is no cargo written down, set to None
                 let cargo_on_board = match entry.get(4).unwrap() {
@@ -1106,7 +1106,7 @@ pub fn csv_to_ship_log(csv_file_path: &str) -> Result<Vec<ShipLogEntry>, io::Err
                     "" => None,
                     course => Some(course.parse::<f64>().unwrap()/10.0),
                 };
-                let velocity = Some(PhysVec::new(entry.get(5).unwrap().parse::<f64>().unwrap(), course.expect("Unknown course over ground when parsing velocity from ship log csv file")));
+                let velocity = Some(PhysVec::new(entry.get(5).unwrap().parse::<f64>().expect("Error getting velocity from csv file"), course.expect("Unknown course over ground when parsing velocity from ship log csv file")));
                 let heading = Some(entry.get(7).unwrap().parse::<f64>().unwrap());
                 // Track angle is between last and current ship log entry, if this is the first entry, set to None
                 let track_angle = match ship_log.len() {
