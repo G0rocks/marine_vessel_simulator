@@ -1516,8 +1516,282 @@ pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(),
     return Ok(());
 }
 
+/// Function that takes generates and saves a polar speed plot csv file
+/// for a wind propelled vessel.
+/// Based on this issue: https://github.com/G0rocks/marine_vessel_simulator/issues/50
+/// The file_path is where the result will be saved as a csv file
+/// Until this issue has been dealt with (https://github.com/G0rocks/marine_vessel_simulator/issues/42) then marine_vessel_simulator does not support using the polar plot but it can be uploaded to openCPN or similar programs to use them.
+/// The polar plot data vector columns are: Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
+/// Warning: All calculations assume meters per second are being used and if knots are being used the vessel speed will be multiplied by 1.94384 to transform into knots but the columns (with the wind speed) will be multiplied by 2 meaning that if knots are used then the result is a worse reflection of reality than if meters per second are used.
+pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool) -> Result<Vec<Vec<f64>>, io::Error> {
+    // Add ".csv" to the end of the file path if it is not there already
+    let mut working_file_path: String = file_path.to_owned();
+    if file_path.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>() != ".csv" {
+        working_file_path = file_path.to_owned() + ".csv";
+    }
+
+    // Init empty polar plot data vector which will have subvectors. Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
+    let mut polar_plot_data_vector: Vec<Vec<f64>> = Vec::new();
+
+    // Check for interactive terminal for progress bar
+    let is_interactive_terminal = atty::is(atty::Stream::Stdout);
+
+    // If simulation has progress bar, set it up and use it
+    if !(simulation.progress_bar.is_none()) {
+        // Set length
+        // Hiding progress bar to prevent two lines of progress bar being drawn
+        simulation.progress_bar.as_ref().unwrap().set_draw_target(indicatif::ProgressDrawTarget::hidden());
+        simulation.progress_bar.as_ref().unwrap().set_length((ship_log.len() as u64) + 1);
+        // If terminal is interactive, use live redraw, otherwise use static redraw
+        if is_interactive_terminal {
+            // Normal terminal behavior (live redraw)
+            simulation.progress_bar.as_ref().unwrap().set_draw_target(indicatif::ProgressDrawTarget::stdout());
+            simulation.progress_bar.as_ref().unwrap().enable_steady_tick(std::time::Duration::from_millis(500));
+        } else {
+            // Force static redraw every step to stdout (or to log)
+            // bar.set_draw_target(indicatif::ProgressDrawTarget::stdout_with_hz(1)); // Or `.stdout_with_hz(1)` for slow redraw
+            let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+            println!("Elapsed: {:?}, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour()+1, eta.minute(), eta.second());
+        }
+        simulation.progress_bar.as_ref().unwrap().inc(0);
+    }
+
+    // Loop through ship_log
+    for entry in ship_log {
+        // Get timestamp
+        let timestamp = entry.timestamp;
+
+        // Get vessel location coordinates
+        let location = entry.coordinates_current;
+        let longitude = location.x();
+        let latitude = location.y();
+        
+        // Get velocity and heading
+        let vessel_velocity = entry.velocity;
+        let heading = entry.heading;
+
+        // Get wind and ocean current data from timestamp and location from Copernicus
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardWind, timestamp, timestamp) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        // let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values("cmems_obs-wind_glo_phy_nrt_l4_0.125deg_PT1H".to_string(), vec!["eastward_wind".to_string(), "northward_wind".to_string()], boat_time_now, boat_time_now, longitude, longitude, latitude, latitude, None, None) {
+        let wind_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["eastward_wind".to_string(), "northward_wind".to_string()], timestamp, timestamp, longitude, longitude, latitude, latitude, None, None) {
+            Ok(w) => w,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error getting wind data from copernicusmarine: {}", e))),
+        };
+        let wind_east_data = &wind_data[0];
+        let wind_north_data = &wind_data[1];
+
+        // Wind speed and direction
+        let wind_east: f64 = wind_east_data[0].unwrap();
+        let wind_north: f64 = wind_north_data[0].unwrap();
+        let wind_angle: f64 = get_north_angle_from_northward_and_eastward_property(wind_east, wind_north);   // Angle in degrees
+        let wind_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((wind_east*wind_east + wind_north*wind_north).sqrt().into());
+        let wind = PhysVec::new(wind_speed.get::<uom::si::velocity::meter_per_second>(), wind_angle);    // unit [m/s]
+
+        // Get ocean current data from Copernicus
+        // "uo" is the eastward sea water velocity and "vo" is the northward sea water velocity
+        let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardSeaWaterVelocity, timestamp, timestamp) {
+            Ok(id) => id,
+            Err(e) => panic!("Error getting dataset id from copernicusmarine: {}", e),
+        };
+        let ocean_current_data = match simulation.copernicus.as_ref().unwrap().get_f64_values(dataset_id, vec!["uo".to_string(), "vo".to_string()], timestamp, timestamp, longitude, longitude, latitude, latitude, Some(0.0), Some(1.0)){
+            Ok(o) => o,
+            Err(e) => panic!("Error getting ocean current data from copernicusmarine: {}", e),
+        };
+        let ocean_current_east_data = &ocean_current_data[0];
+        let ocean_current_north_data = &ocean_current_data[1];
+
+        // Ocean current speed and direction
+        let ocean_current_east: f64 = ocean_current_east_data[0].expect("ocean current fill value?");
+        let ocean_current_north: f64 = ocean_current_north_data[0].expect("ocean current fill value?");
+        let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
+        let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
+        let ocean_current = PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle);    // unit [m/s]
+
+        // Offset velocity by ocean current velocity (a.k.a. account for set and drift)
+        let mut vessel_velocity_through_water: PhysVec = match vessel_velocity {
+            Some(v) => v - ocean_current,
+            None => {
+                // If no vessel velocity, return error since no polar plot data can be generated
+                return Err(io::Error::new(io::ErrorKind::Other, "No vessel velocity data in ship log entry, cannot generate polar plot data"));
+            }
+        };
+        // Make sure the angle is between 0.0 and 360.0 degrees
+        while vessel_velocity_through_water.angle < 0.0 {
+            vessel_velocity_through_water.angle += 360.0;
+        }
+        while vessel_velocity_through_water.angle >= 360.0 {
+            vessel_velocity_through_water.angle -= 360.0;
+        }
+
+        // Compute apparent wind
+        let apparent_wind = wind - ocean_current;
+        // Include heading
+        let mut apparent_wind = PhysVec::new(apparent_wind.magnitude, apparent_wind.angle - heading.unwrap());
+        // Make sure the angle is between 0.0 and 360.0 degrees
+        while apparent_wind.angle < 0.0 {
+            apparent_wind.angle += 360.0;
+        }
+        while apparent_wind.angle >= 360.0 {
+            apparent_wind.angle -= 360.0;
+        }
+
+        // Log apparent wind angle, wind speed and vessel speed to polar plot data vector
+        polar_plot_data_vector.push(vec![apparent_wind.angle, apparent_wind.magnitude, vessel_velocity_through_water.magnitude]);
+
+        // Update progress bar if a progress bar is in use
+        if !(simulation.progress_bar.is_none()) {
+            // update progress bar
+            simulation.progress_bar.as_ref().unwrap().inc(1);
+            // If not interactive terminal, print progressbar manually
+            if is_interactive_terminal == false {
+                let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+            println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
+            }   // End if
+        }   // End if
+    }   // End for loop
+
+    // Make mutable standardized polar plot data vector (based off of opencpn polar plot csv files but with wind in m/s). Include option for having None for unknown values
+    // Column 0 is the angle of the apparent wind in degrees
+    // column 1-40 contains tuples which are (n, VTW.magnitude) where n signifies how many values have been used to generate the average value VTW.magnitude which is the magnitude of the Velocity through water vector.
+    // Note the VTW.magnitude is given in m/s in 1 m/s increments
+    let mut standard_data_vector: Vec<Vec<(usize, Option<f64>)>> = Vec::new();
+
+    // Fill the first column of the standard data vector with 5° increments, set all unknown values to None
+    for i in 0..37 {
+        let angle = (i as f64) * 5.0;
+        let mut sub_vec: Vec<(usize, Option<f64>)> = Vec::new();
+        sub_vec.push((angle as usize, Some(angle)));
+        for _k in 0..20 {
+            sub_vec.push((0, None));
+        }
+        standard_data_vector.push(sub_vec);
+    }
+
+    // Now that all the data has been collected for the polar plot, we should loop through it and standardize it to be formatted in the similar numbers that the weather routing programs would use it
+    for i in 0..polar_plot_data_vector.len() {
+        // We only need one side of the polar plot, let's use the right side, everything else can be mirrored afterwards (effectively potentially doubles the available data)
+        if polar_plot_data_vector[i][0] > 180.0 {
+            polar_plot_data_vector[i][0] = 360.0 - polar_plot_data_vector[i][0];
+        }
+
+        // Find the nearest wind angle (in 5° increments) to this wind angle
+        let nearest_angle_diff: f64 = polar_plot_data_vector[i][0]%5.0;
+        let nearest_angle: f64;
+        if nearest_angle_diff < 2.5 {
+            // Round down to the nearest 5°
+            nearest_angle = polar_plot_data_vector[i][0] - nearest_angle_diff;
+        } else {
+            // Round up to the nearest 5°
+            nearest_angle = polar_plot_data_vector[i][0] + (5.0 - nearest_angle_diff);
+        }
+
+        // Find the row in the standard_data_vector that corresponds to this nearest angle
+        let row: usize = (nearest_angle/5.0) as usize;
+
+        // Find the nearest wind speed (in 1 m/s increments) to this wind speed
+        let nearest_wind_speed_diff: f64 = polar_plot_data_vector[i][1]%1.0;
+        let nearest_wind_speed: f64;
+        if nearest_wind_speed_diff < 0.5 {
+            // Round down to the nearest 1 m/s
+            nearest_wind_speed = polar_plot_data_vector[i][1] - nearest_wind_speed_diff;
+        } else {
+            // Round up to the nearest 1 m/s
+            nearest_wind_speed = polar_plot_data_vector[i][1] + (1.0 - nearest_wind_speed_diff);
+        }
+
+        // Find the row in the standard_data_vector that corresponds to this nearest angle
+        let column: usize = (nearest_wind_speed/1.0) as usize;
+
+        // If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
+        // Let's average it directly and skip the linear interpolation for now, adding an issue about it
+        if standard_data_vector[row][column].1.is_some() {
+            // Get current number of values used to make the average            
+            let current_n: usize = standard_data_vector[row][column].0;
+            // Get current average vessel speed
+            let current_speed: f64 = standard_data_vector[row][column].1.unwrap();
+            // Make new average vessel speed by adding the new value and incrementing the number of values used to make the average
+            standard_data_vector[row][column] = (current_n + 1, Some((current_speed*(current_n as f64) + polar_plot_data_vector[i][2])/((current_n + 1) as f64)));
+        }
+        // Otherwise if this is the first value, assume it stays the same and put it directly into the standard_data_vector
+        else {
+            standard_data_vector[row][column] = (1, Some(polar_plot_data_vector[i][2]));
+        }
+    }
+
+    // Now that the underlying polar plot data is ready, save the results to a csv file
+    // Create a CSV writer with a semicolon delimiter
+    let mut wtr = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(working_file_path)?;
+
+    // Write the header
+    let mut header_vec: Vec<String> = Vec::new();
+    // First column in the header is "TWA\TWS" and not "wind angle [°]" because that is what openCPN uses
+    header_vec.push("TWA\\TWS".to_string());
+    for i in 1..21 {
+        // If knots, format in knots
+        if true_if_knots_false_if_meters_per_second {
+            header_vec.push(format!("{}", i*2));
+        } // Otherwise use meters per second (preferred)
+        else {
+            header_vec.push(format!("{}", i));
+        }
+    }
+    
+    wtr.write_record(&header_vec)?;
+
+    // Write the standard_data_vector into the csv file
+    for row in standard_data_vector.iter() {
+        // Init empty record to write
+        let mut record: Vec<String> = Vec::new();
+        // Add the wind angle to the first column
+        // record.push(row[0].0);
+
+        // For the rest of the row, if the boat speed is None, add an empty string, else, add the boat speed to the record
+        // Note: The first cell should always be some as it should include the apparent wind angle
+        for (i, cell) in row.iter().enumerate() {
+            // If the value is Some, add it
+            if cell.1.is_some() {
+                // If it's the first column, just add it since it is the angle of the wind
+                if i == 0 {
+                    record.push(cell.1.unwrap().to_string());
+                } // Otherwise, check if we're using knots or meters per second
+                else {
+                    // If knots, transform to knots
+                    if true_if_knots_false_if_meters_per_second {
+                        record.push((cell.1.unwrap() * 1.94384).to_string());
+                    } // Otherwise, use meters_per_second
+                    else {
+                        record.push(cell.1.unwrap().to_string());
+                    }
+                }
+            } // Otherwise, add empty string
+            else {
+                record.push(String::new());
+            }
+        }
+
+        // Write the record
+        wtr.write_record(&record)?;
+    }
+
+    // Flush and close the writer
+    wtr.flush()?;
+
+    // Finish progress bar
+    simulation.progress_bar.as_ref().unwrap().finish();
+
+    // Return data vector
+    return Ok(polar_plot_data_vector);
+}
+
 
 // Set up tests here
+//-----------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
