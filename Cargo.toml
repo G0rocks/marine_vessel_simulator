@@ -1,6 +1,6 @@
 [package]
 name = "marine_vessel_simulator"
-version = "0.1.1"
+version = "1.0.0"
 license = "GPL-3.0-or-later"
 # license-file = "LICENSE"
 edition = "2024"
@@ -19,12 +19,12 @@ uom = "0.37.0"
 year-helper = "0.2.1"
 time = {version = "0.3.41", features = ["formatting"]}
 netcdf = "0.11.0"
-# indicatif = "0.17.11"
-# copernicusmarine_rs = "0.1.0"
+indicatif = "0.17.11"
+copernicusmarine_rs = "1.0.0"
 plotly = "0.13.3"
+atty = "0.2.14"
 
 # Temporary local dependencies for development
 # plotly = { path = "../plotly_local/plotly" }    # This commit since using scattergeo and waiting for next release: https://github.com/plotly/plotly.rs/commit/75797e4c9d2d690b3802a65b18b9a151216879fa
-copernicusmarine_rs = { path = "../copernicusmarine_rs" }    # Used since also developing the copernicusmarine_rs crate
-indicatif = { path = "../indicatif" }    # Used to try to update the ETA of indicatif crate so it shows a more accurate time estimate
-atty = "0.2.14"
+# copernicusmarine_rs = { path = "../copernicusmarine_rs" }    # Used since also developing the copernicusmarine_rs crate
+# indicatif = { path = "../indicatif" }    # Used to try to update the ETA of indicatif crate so it shows a more accurate time estimate
