@@ -1523,6 +1523,7 @@ pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(),
 /// Until this issue has been dealt with (https://github.com/G0rocks/marine_vessel_simulator/issues/42) then marine_vessel_simulator does not support using the polar plot but it can be uploaded to openCPN or similar programs to use them.
 /// The polar plot data vector columns are: Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
 /// Warning: All calculations assume meters per second are being used and if knots are being used the vessel speed will be multiplied by 1.94384 to transform into knots but the columns (with the wind speed) will be multiplied by 2 meaning that if knots are used then the result is a worse reflection of reality than if meters per second are used.
+/// Note: If not ocean current data is retrieved, the current is assumed to be flowing at zero meters per second
 pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool) -> Result<Vec<Vec<f64>>, io::Error> {
     // Add ".csv" to the end of the file path if it is not there already
     let mut working_file_path: String = file_path.to_owned();
@@ -1604,8 +1605,14 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         let ocean_current_north_data = &ocean_current_data[1];
 
         // Ocean current speed and direction
-        let ocean_current_east: f64 = ocean_current_east_data[0].expect("ocean current fill value?");
-        let ocean_current_north: f64 = ocean_current_north_data[0].expect("ocean current fill value?");
+        let ocean_current_east: f64 = match ocean_current_east_data[0] {
+            Some(v) => v,
+            None => 0.0,
+        };
+        let ocean_current_north: f64 = match ocean_current_north_data[0] {
+            Some(v) => v,
+            None => 0.0,
+        };
         let ocean_current_angle: f64 = get_north_angle_from_northward_and_eastward_property(ocean_current_east, ocean_current_north);   // Angle in degrees
         let ocean_current_speed = uom::si::f64::Velocity::new::<uom::si::velocity::meter_per_second>((ocean_current_east*ocean_current_east + ocean_current_north*ocean_current_north).sqrt().into());
         let ocean_current = PhysVec::new(ocean_current_speed.get::<uom::si::velocity::meter_per_second>(), ocean_current_angle);    // unit [m/s]
