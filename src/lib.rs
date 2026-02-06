@@ -1106,8 +1106,20 @@ pub fn csv_to_ship_log(csv_file_path: &str) -> Result<Vec<ShipLogEntry>, io::Err
                     "" => None,
                     course => Some(course.parse::<f64>().unwrap()/10.0),
                 };
-                let velocity = Some(PhysVec::new(entry.get(5).unwrap().parse::<f64>().expect("Error getting velocity from csv file"), course.expect("Unknown course over ground when parsing velocity from ship log csv file")));
-                let heading = Some(entry.get(7).unwrap().parse::<f64>().unwrap());
+                // Init velocity
+                let velocity: Option<PhysVec>;
+                // If speed and course are known, set velocity PhysVec to use them otherwise set velocity to None
+                if entry.get(5).unwrap().parse::<f64>().is_ok() && course.is_some() {
+                    velocity = Some(PhysVec::new(entry.get(5).unwrap().parse::<f64>().expect("Error getting velocity from csv file"), course.expect("Unknown course over ground when parsing velocity from ship log csv file")));
+                }
+                else {
+                    velocity = None;
+                }
+                // if there is a heading written down, set the heading to that, otherwise, set to None
+                let heading: Option<f64> = match entry.get(7).unwrap() {
+                    "" => None,
+                    h => Some(h.parse::<f64>().unwrap()),
+                };
                 // Track angle is between last and current ship log entry, if this is the first entry, set to None
                 let track_angle = match ship_log.len() {
                     0 => None,
