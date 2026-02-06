@@ -1571,6 +1571,23 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         let vessel_velocity = entry.velocity;
         let heading = entry.heading;
 
+        // If vessel velocity or heading is None skip this entry since we need both data fields
+        if vessel_velocity == None || heading == None {
+            // Update progress bar if a progress bar is in use
+            if !(simulation.progress_bar.is_none()) {
+                // update progress bar
+                simulation.progress_bar.as_ref().unwrap().inc(1);
+                // If not interactive terminal, print progressbar manually
+                if is_interactive_terminal == false {
+                    let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
+                println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
+                }   // End if
+            }   // End if
+
+            // Skip to next iteration of loop
+            continue;
+        }
+
         // Get wind and ocean current data from timestamp and location from Copernicus
         let dataset_id: String = match copernicusmarine_rs::get_dataset_id(copernicusmarine_rs::CopernicusVariable::EastwardWind, timestamp, timestamp) {
             Ok(id) => id,
