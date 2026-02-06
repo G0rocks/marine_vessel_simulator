@@ -32,7 +32,7 @@ pub use crate::vessels::*; // Import the simulators module
 // Structs and enums
 //----------------------------------------------------
 /// A physics vector struct that holds vector data... for physics :)
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct PhysVec {
     /// Magnitude, make sure that the units are correct
     pub magnitude: f64,
