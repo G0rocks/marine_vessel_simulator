@@ -949,9 +949,9 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
 /// Note that the coordinates are in the format of ISO 6709 using decimal places with a comma between latitude and longitude. "latitude,longitude" (e.g., "52.5200,13.4050")
 /// The cargo is in metric tons (1 metric ton = 1000 kg)
 /// csv_file_path: Path to the CSV file
-/// boat: The boat object containing the ship logs
+/// ship_logs: The ship logs from the vessel
 /// Note: The csv file delimiter is a semicolon
-pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Error> {
+pub fn ship_logs_to_csv(csv_file_path: &str, ship_logs: &Vec<ShipLogEntry>) -> Result<(), io::Error> {
     // Create a CSV writer with a semicolon delimiter
     // let mut wtr = csv::WriterBuilder::new().delimiter(b';').from_path(csv_file_path)?;
     let mut wtr = csv::WriterBuilder::new()
@@ -963,7 +963,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, boat: &Boat) -> Result<(), io::Erro
     wtr.write_record(&["timestamp", "coordinates_initial", "coordinates_current", "coordinates_final", "cargo_on_board[ton]", "velocity[m/s]", "course[°]", "heading", "true_bearing[°]", "draught[m]", "navigation_status"])?;
 
     // Write the ship log entries
-    for entry in boat.ship_log.iter() {
+    for entry in ship_logs.iter() {
         let mut _timestamp_string: String = String::new();  //Underscored to avoid unused variable warning since it is used in wtr.write_record
         _timestamp_string.push_str(entry.timestamp.year().to_string().as_str());
         _timestamp_string.push_str("-");
