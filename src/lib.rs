@@ -997,6 +997,12 @@ pub fn ship_logs_to_csv(csv_file_path: &str, ship_logs: &Vec<ShipLogEntry>) -> R
         }
         _timestamp_string.push_str(entry.timestamp.second().to_string().as_str());
 
+        // If cargo is None, set to empty string
+        let cargo = match entry.cargo_on_board {
+            Some(c) => c.get::<uom::si::mass::ton>().to_string(),
+            None => String::from(""),
+        };
+
         // If velocity is None, set to empty string
         let velocity = match entry.velocity {
             Some(v) => v.magnitude.to_string(),
@@ -1039,7 +1045,7 @@ pub fn ship_logs_to_csv(csv_file_path: &str, ship_logs: &Vec<ShipLogEntry>) -> R
             format!("{},{}", entry.coordinates_initial.y(), entry.coordinates_initial.x()),
             format!("{},{}", entry.coordinates_current.y(), entry.coordinates_current.x()),
             format!("{},{}", entry.coordinates_final.y(), entry.coordinates_final.x()),
-            entry.cargo_on_board.unwrap().get::<uom::si::mass::ton>().to_string(),
+            cargo,            // entry.cargo_on_board.unwrap().get::<uom::si::mass::ton>().to_string(),
             velocity,
             course,
             heading,
