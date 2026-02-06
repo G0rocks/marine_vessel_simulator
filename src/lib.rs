@@ -1857,6 +1857,232 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     return Ok(polar_plot_data_vector);
 }
 
+/// Function that copies a csv file of ship logs taken from (aishub_data_collector)[https://crates.io/crates/aishub_data_collector]
+/// and saves a copy of the ship log csv file formatted for marine_vessel_simulator
+/// Note both the input and output filepaths must end with ".csv"
+/// Note the initial coordinates default to (0.0, 0.0) degrees.
+/// Note that this function assumes the aishub data is stored in the AIS encoding not the human readable format
+/// More info on aishub api: https://www.aishub.net/api
+/// 
+/// If this function is no longer working since there is a new version of aishub_data_collector or similar, please submit an issue on the (marine_vessel_simulator issue tracker)[https://github.com/G0rocks/marine_vessel_simulator/issues]
+/// Last updated 2026-02-01, it works with aishub_data_collector version 1.1.0
+/// aishub_data_collector currently saves data into a csv file with the heading:
+/// 
+/// A,B,C,CALLSIGN,COG,D,DEST,DRAUGHT,DEVICE,ETA,HEADING,IMO,LATITUDE,LONGITUDE,MMSI,NAME,NAVSTAT,PAC,ROT,SOG,TSTAMP,TYPE
+pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input: &str, filepath_output: &str) -> Result<Vec<ShipLogEntry>, io::Error> {
+    // Check if filepath_input ends with ".csv", if not, return an invalid input error
+    if !check_file_extension(filepath_input, ".csv") {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Input file path must end with '.csv'"));
+    }
+    // Check if filepath_output ends with ".csv", if not, return an invalid input error
+    if !check_file_extension(filepath_output, ".csv") {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Output file path must end with '.csv'"));
+    }
+
+    // Read the aishub ship log csv file into a Shiplog struct
+    // Init ship logs vector
+    let mut aishub_logs: Vec<ShipLogEntry> = Vec::new();
+
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+
+    // Since aishub does not provide information on cargo on board, set cargo on board to None
+    let cargo_on_board = None;
+
+    // Get the initial and final coordinates
+    // Init coordinates_initial
+    let first_record = match csv_reader.records().next().expect("Could not get first entry from file") {
+        Ok(r) => r,
+        Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Error getting first record from aishub_data_collector file: {}", e)))?,
+    };
+    let latitude = match first_record.get(12).unwrap().parse::<f64>() {
+        Ok(v) => v/600000.0,
+        Err(e) => panic!("Error getting initial coordinates from aishub_data_collector csv file: {}", e),
+    };
+    let longitude = match first_record.get(13).unwrap().parse::<f64>() {
+        Ok(v) => v/600000.0,
+        Err(e) => panic!("Error getting initial coordinates from aishub_data_collector csv file: {}", e),
+    };
+
+    let coordinates_initial = geo::Point::new(longitude, latitude);
+
+    // Get final coordinates
+    let last_record =  match csv_reader.records().last().expect("Could not get last entry from csv file") {
+        Ok(r) => r,
+        Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Error getting last record from aishub_data_collector csv file: {}", e)))?,
+    };
+    let latitude = match last_record.get(12).unwrap().parse::<f64>() {
+        Ok(v) => v/600000.0,
+        Err(e) => panic!("Error getting final coordinates from aishub_data_collector csv file: {}", e),
+    };
+    let longitude = match last_record.get(13).unwrap().parse::<f64>() {
+        Ok(v) => v/600000.0,
+        Err(e) => panic!("Error getting final coordinates from aishub_data_collector csv file: {}", e),
+    };
+    let coordinates_final: geo::Point = geo::Point::new(longitude, latitude);
+
+    // Start another csv reader stream since we already went through the whole stream.
+    // This way we can start from the first record again
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+
+    // Loop through all lines of file, append each line to the ship log
+    for result in csv_reader.records() {
+        match result {
+            Ok(entry) => {
+                // Get the entry simplified to reduce how verbose everything is
+                // let entry = entry.get(0).unwrap().split(',');
+                // Get all aishub_data_collector csv file fields
+                // For each entry which aishub could signal is not available, check if the value is valid or not
+                let _a = entry.get(0);
+                let _b = entry.get(1);
+                let _c = entry.get(2);
+                let _callsign = entry.get(3);
+                // If cog is 3600 the value is unknown
+                let mut cog: Option<f64> = Some(entry.get(4).unwrap().parse::<f64>().unwrap());
+                if cog.unwrap() == 3600.0 {
+                    cog = None;
+                }
+                else {
+                    cog = Some(cog.unwrap()/10.0);
+                }
+                let _d = entry.get(5);
+                let _dest = entry.get(6);
+                // Draft must be non-zero, if zero, report as None
+                let mut draft = Some(0.0);
+                if draft.unwrap() == 0.0 {
+                    draft = None;
+                }
+                let _device = entry.get(8);
+                let _eta = entry.get(9);
+                // A heading of 511 means not available
+                let mut heading: Option<f64> = Some(entry.get(10).expect("Could not get heading from file").parse::<f64>().unwrap());
+                if heading.unwrap() == 511.0 {
+                    heading = None;
+                }
+                let _imo = entry.get(11);
+                // Aishub stores latitude and longitude data in 1/10000 minute
+                let latitude = entry.get(12).unwrap().parse::<f64>().unwrap()/600000.0;
+                let longitude = entry.get(13).unwrap().parse::<f64>().unwrap()/600000.0;
+                let _mmsi = entry.get(14);
+                let _name = entry.get(15);
+                let navstat = entry.get(16).expect("Could not get navstat from file").parse::<u8>().unwrap();
+                let _pac = entry.get(17);
+                let _rot = entry.get(18);
+                // If sog is 1024 the value is unknown
+                let mut sog: Option<f64> = Some(entry.get(19).expect("Could not get sog from file").parse::<f64>().unwrap());
+                if sog.unwrap() == 1024.0 {
+                    sog = None;
+                }
+                else {
+                    // sog is given in knots so in addition to dividing by 10.0 we must also convert to meters per second
+                    sog = Some(sog.unwrap()/10.0/1.944);
+                }
+                let tstamp = entry.get(20).expect("Could not get tstamp from file").parse::<i64>().unwrap();
+                let _vessel_type = entry.get(21);
+
+                // Convert all aishub_data_collector fields into marine_vessel_simulator ShipLogEntry fields. Note aishub stores tstamp in unix time
+                let timestamp: time::UtcDateTime = match time::UtcDateTime::from_unix_timestamp(tstamp) {
+                    Ok(t) => t,
+                    Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Error converting tstamp to UtcDateTime: {}", e)))?,
+                };
+
+                let coordinates_current = geo::Point::new(longitude,latitude);
+                
+                // Init velocity
+                let velocity: Option<PhysVec>;
+                // If sog is unknown, set velocity to None
+                if sog == None {
+                    velocity = None;
+                }   // Otherwise if cog is None, check if sog is zero
+                else if cog == None {
+                    // If sog is zero set sog and cog to zero in velocity since the direction does not matter
+                    if sog.unwrap() == 0.0 {
+                        velocity = Some(PhysVec::new(0.0, 0.0));
+                    } // Otherwise set velocity to None since we don't know the direction
+                    else {
+                        velocity = None;
+                    }
+                } // Otherwise, we know both cog and sog
+                else {
+                    velocity = Some(PhysVec::new(sog.expect("Could not get sog when making velocity vector"), cog.expect("Could not get cog when making velocity vector")));
+                }
+
+                // Track angle is between last and current ship log entry, if this is the first entry, set to None
+                let track_angle = match aishub_logs.len() {
+                    0 => None,
+                    _ => {
+                        let last_entry: &ShipLogEntry = aishub_logs.last().unwrap();
+                        let last_coords: geo::Point = last_entry.coordinates_current;
+                        let curr_coords: geo::Point = coordinates_current;
+                        Some(geo::Haversine.bearing(last_coords, curr_coords))
+                    }
+                };
+                // Set true_bearing to angle between current location and final coordinates
+                let true_bearing = Some(geo::Haversine.bearing(coordinates_current, coordinates_final));
+
+                let navigation_status: Option<NavigationStatus> = match NavigationStatus::try_from(navstat) {
+                    Ok(status) => Some(status),
+                    Err(_) => None,                    
+                };
+
+                // Add ship log entry
+                aishub_logs.push(
+                    ShipLogEntry {
+                        timestamp,
+                        coordinates_initial,
+                        coordinates_current,
+                        coordinates_final,
+                        cargo_on_board,
+                        velocity,
+                        course: cog,
+                        heading,
+                        track_angle,
+                        true_bearing,
+                        draft,
+                        navigation_status,
+                    });
+                }
+            Err(err) => {
+                eprintln!("Error reading ship log entry from aishub_data_collector: {}", err);
+            }
+        }
+    }
+
+    // Write Shiplog to csv file
+    ship_logs_to_csv(filepath_output, &aishub_logs)?;
+
+    // Return success
+    return Ok(aishub_logs);
+}
+
+
+/// Helper function that checks if a file extensions matches the given file extension.
+/// A file called "mydata.csv" passed through this function with either ".csv" or "csv" will return true
+pub fn check_file_extension(filepath: &str, extension: &str) -> bool {
+    // Get num_chars in filepath and extension
+    let num_chars_in_file = filepath.len();
+    let num_chars_in_extension = extension.len();
+
+    // Check if filepath has at least the same number of characters as the extension. If fewer, retun false
+    if num_chars_in_file < num_chars_in_extension {
+        return false;
+    }
+
+    // Check if the filepath string ends with the extension, if so return true, otherwise return false
+    if &filepath[(num_chars_in_file - num_chars_in_extension)..] == extension {
+        return true;
+    } else {
+        return false;
+    }
+}
 
 // Set up tests here
 //-----------------------------------------------------------------------------------
