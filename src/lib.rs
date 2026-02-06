@@ -1540,13 +1540,33 @@ pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(),
 /// The file_path is where the result will be saved as a csv file
 /// Until this issue has been dealt with (https://github.com/G0rocks/marine_vessel_simulator/issues/42) then marine_vessel_simulator does not support using the polar plot but it can be uploaded to openCPN or similar programs to use them.
 /// The polar plot data vector columns are: Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
-/// Warning: All calculations assume meters per second are being used and if knots are being used the vessel speed will be multiplied by 1.94384 to transform into knots but the columns (with the wind speed) will be multiplied by 2 meaning that if knots are used then the result is a worse reflection of reality than if meters per second are used.
+/// Warning: All calculations assume meters per second are being used and if knots are being used the vessel speed will be multiplied by 1.94384 to transform into knots and the columns (with the wind speed) will be multiplied by 2 (to ensure that the file can be opened by openCPN) meaning that if knots are used then the potentially there will be issues in using the data than if meters per second are used.
 /// Note: If not ocean current data is retrieved, the current is assumed to be flowing at zero meters per second
-pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool) -> Result<Vec<Vec<f64>>, io::Error> {
+/// Note: If no degree_segment_size is given, defaults to 5°. If a segment size is given it must be so that 180° is divisible by the segment size
+/// Note: If no wind_speed_segment_size is given, defaults to 1 m/s. If a segment size is given it must be so that 40 m/s is divisible by the segment size. Will always use m/s and not knots.
+/// Note: As of 2026-02-06 OpenCPN polar plugin only accepts values in degree increments of 5° and column increments of 2 (no unit). In order to generate a polar speed plot csv file which can be opened by this plugin the same constraints are put on the input degree and wind speed segment sizes, that is that they must be divisible by 5° and 2 m/s. Follow this issue for updates: https://github.com/G0rocks/marine_vessel_simulator/issues/56
+pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool, degree_segment_size: Option<f64>, wind_speed_segment_size: Option<f64>) -> Result<Vec<Vec<f64>>, io::Error> {
     // Add ".csv" to the end of the file path if it is not there already
     let mut working_file_path: String = file_path.to_owned();
     if file_path.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>() != ".csv" {
         working_file_path = file_path.to_owned() + ".csv";
+    }
+
+    // Get working degree segment size from degree_segment_size and evaluate if it is so that 180° are divisible by it
+    let working_degree_segment_size: f64 = degree_segment_size.unwrap_or_else(|| 5.0);
+    if 180.0 % working_degree_segment_size != 0.0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid input: degree segment size: {}°.\nThe degree segment size must be so that 180° is divisible by the angle", working_degree_segment_size)));
+    }
+    if working_degree_segment_size % 5.0 != 0.0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid input: degree segment size: {}°.\nThe degree segment size must be divisible by 5° to ensure compatibility with openCPN polar plugin", working_degree_segment_size)));
+    }
+    // Get working wind speed segment size from wind_speed_segment_size and evaluate if it is so that 40 m/s is divisible by it
+    let working_wind_speed_segment_size: f64 = wind_speed_segment_size.unwrap_or_else(|| 1.0);
+    if 40.0 % working_wind_speed_segment_size != 0.0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid input: wind speed segment size: {} m/s.\nThe wind speed segment size must be so that 40 m/s is divisible by the segment size", working_wind_speed_segment_size)));
+    }
+    if working_wind_speed_segment_size % 2.0 != 0.0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid input: wind speed segment size: {} m/s.\nThe wind speed segment size must be divisible by 2 m/s to ensure compatibility with openCPN polar plugin", working_wind_speed_segment_size)));
     }
 
     // Init empty polar plot data vector which will have subvectors. Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
@@ -1701,12 +1721,17 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     // Note the VTW.magnitude is given in m/s in 1 m/s increments
     let mut standard_data_vector: Vec<Vec<(usize, Option<f64>)>> = Vec::new();
 
-    // Fill the first column of the standard data vector with 5° increments, set all unknown values to None
+    // First find how many degree and wind speed segments we have
+    let num_degree_segments: u16 = (180.0/working_degree_segment_size) as u16 + 1;   // +1 for the degrees since both 0° and 180° are included  // Keeping this even though it is currently unused since when this issue gets resolved we can use it again: https://github.com/G0rocks/marine_vessel_simulator/issues/56
+    let num_wind_speed_segments: u8 = (40.0/working_wind_speed_segment_size) as u8;     // No +1 since 0 m/s is not included but 40 m/s is included
+    
+    // Fill the first column of the standard data vector with working_degree_segment_size increments, set all unknown values to None
+    // Use 0..37 since OpenCPN polar plugin only accepts values in 5° increments
     for i in 0..37 {
         let angle = (i as f64) * 5.0;
         let mut sub_vec: Vec<(usize, Option<f64>)> = Vec::new();
         sub_vec.push((angle as usize, Some(angle)));
-        for _k in 0..20 {
+        for _k in 0..num_wind_speed_segments {
             sub_vec.push((0, None));
         }
         standard_data_vector.push(sub_vec);
@@ -1720,37 +1745,38 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         }
 
         // Find the nearest wind angle (in 5° increments) to this wind angle
-        let nearest_angle_diff: f64 = polar_plot_data_vector[i][0]%5.0;
+        let nearest_angle_diff: f64 = polar_plot_data_vector[i][0] % working_degree_segment_size;
         let nearest_angle: f64;
-        if nearest_angle_diff < 2.5 {
-            // Round down to the nearest 5°
+        if nearest_angle_diff < working_degree_segment_size/2.0 {
+            // Round down to the nearest working_degree_segment_size
             nearest_angle = polar_plot_data_vector[i][0] - nearest_angle_diff;
         } else {
-            // Round up to the nearest 5°
-            nearest_angle = polar_plot_data_vector[i][0] + (5.0 - nearest_angle_diff);
+            // Round up to the nearest working_degree_segment_size
+            nearest_angle = polar_plot_data_vector[i][0] + (working_degree_segment_size - nearest_angle_diff);
         }
 
-        // Find the row in the standard_data_vector that corresponds to this nearest angle
+        // Find the row in the standard_data_vector that corresponds to this nearest angle. Rows given in 5° increments until OpenCPN polar plugin accepts other angles
+        // Use this when the OpenCPN polar plugin accepts custom angles: let row: usize = (nearest_angle/working_degree_segment_size) as usize;
         let row: usize = (nearest_angle/5.0) as usize;
 
         // Find the nearest wind speed (in 1 m/s increments) to this wind speed
-        let nearest_wind_speed_diff: f64 = polar_plot_data_vector[i][1]%1.0;
+        let nearest_wind_speed_diff: f64 = polar_plot_data_vector[i][1] % working_wind_speed_segment_size;
         let nearest_wind_speed: f64;
-        if nearest_wind_speed_diff < 0.5 {
-            // Round down to the nearest 1 m/s
+        if nearest_wind_speed_diff < working_wind_speed_segment_size/2.0 {
+            // Round down to the nearest working_wind_speed_segment_size
             nearest_wind_speed = polar_plot_data_vector[i][1] - nearest_wind_speed_diff;
         } else {
-            // Round up to the nearest 1 m/s
-            nearest_wind_speed = polar_plot_data_vector[i][1] + (1.0 - nearest_wind_speed_diff);
+            // Round up to the nearest working_wind_speed_segment_size
+            nearest_wind_speed = polar_plot_data_vector[i][1] + (working_wind_speed_segment_size - nearest_wind_speed_diff);
         }
 
         // Find the row in the standard_data_vector that corresponds to this nearest angle
-        let column: usize = (nearest_wind_speed/1.0) as usize;
+        let column: usize = (nearest_wind_speed/working_wind_speed_segment_size) as usize;
 
         // If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
         // Let's average it directly and skip the linear interpolation for now, adding an issue about it
         if standard_data_vector[row][column].1.is_some() {
-            // Get current number of values used to make the average            
+            // Get current number of values used to make the average
             let current_n: usize = standard_data_vector[row][column].0;
             // Get current average vessel speed
             let current_speed: f64 = standard_data_vector[row][column].1.unwrap();
@@ -1774,13 +1800,13 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     let mut header_vec: Vec<String> = Vec::new();
     // First column in the header is "TWA\TWS" and not "wind angle [°]" because that is what openCPN uses
     header_vec.push("TWA\\TWS".to_string());
-    for i in 1..21 {
+    for i in 1..(num_wind_speed_segments+1) {
         // If knots, format in knots
         if true_if_knots_false_if_meters_per_second {
-            header_vec.push(format!("{}", i*2));
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size*1.94384));
         } // Otherwise use meters per second (preferred)
         else {
-            header_vec.push(format!("{}", i));
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size));
         }
     }
     
