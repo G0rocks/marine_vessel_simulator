@@ -1761,7 +1761,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
 
         // Find the nearest wind speed (in 1 m/s increments) to this wind speed
         let nearest_wind_speed_diff: f64 = polar_plot_data_vector[i][1] % working_wind_speed_segment_size;
-        let nearest_wind_speed: f64;
+        let mut nearest_wind_speed: f64;
         if nearest_wind_speed_diff < working_wind_speed_segment_size/2.0 {
             // Round down to the nearest working_wind_speed_segment_size
             nearest_wind_speed = polar_plot_data_vector[i][1] - nearest_wind_speed_diff;
@@ -1769,11 +1769,15 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
             // Round up to the nearest working_wind_speed_segment_size
             nearest_wind_speed = polar_plot_data_vector[i][1] + (working_wind_speed_segment_size - nearest_wind_speed_diff);
         }
+        // If the nearest wind speed is set to zero then the column will be zero so we move the nearest wind speed up one segment size
+        if nearest_wind_speed == 0.0 {
+            nearest_wind_speed += working_wind_speed_segment_size;
+        }
 
         // Find the row in the standard_data_vector that corresponds to this nearest angle
         let column: usize = (nearest_wind_speed/working_wind_speed_segment_size) as usize;
 
-        // If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
+        // Imrpovement idea: If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
         // Let's average it directly and skip the linear interpolation for now, adding an issue about it
         if standard_data_vector[row][column].1.is_some() {
             // Get current number of values used to make the average
