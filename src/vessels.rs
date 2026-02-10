@@ -52,7 +52,7 @@ pub struct ShipLogEntry {
 
 /// Navigational status of the vessel based on the AIS navigation status codes
 /// See: <https://support.marinetraffic.com/en/articles/9552867-what-is-the-significance-of-the-ais-navigational-status-values>
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 #[repr(u64)]
     pub enum NavigationStatus {
     UnderwayUsingEngine         = 0,
