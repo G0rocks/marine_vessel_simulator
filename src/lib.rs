@@ -1902,13 +1902,14 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
 /// Note the initial coordinates default to (0.0, 0.0) degrees.
 /// Note that this function assumes the aishub data is stored in the AIS encoding not the human readable format
 /// More info on aishub api: https://www.aishub.net/api
+/// The navigation status filter will set it so that the marine vessel simulator shiplog csv file will only contain the aishub data collector ship log entries which are logged under the same status. Set to None to use all values in the ship log.
 /// 
 /// If this function is no longer working since there is a new version of aishub_data_collector or similar, please submit an issue on the (marine_vessel_simulator issue tracker)[https://github.com/G0rocks/marine_vessel_simulator/issues]
 /// Last updated 2026-02-01, it works with aishub_data_collector version 1.1.0
 /// aishub_data_collector currently saves data into a csv file with the heading:
 /// 
 /// A,B,C,CALLSIGN,COG,D,DEST,DRAUGHT,DEVICE,ETA,HEADING,IMO,LATITUDE,LONGITUDE,MMSI,NAME,NAVSTAT,PAC,ROT,SOG,TSTAMP,TYPE
-pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input: &str, filepath_output: &str) -> Result<Vec<ShipLogEntry>, io::Error> {
+pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input: &str, filepath_output: &str, navigation_status_filter: Option<NavigationStatus>) -> Result<Vec<ShipLogEntry>, io::Error> {
     // Check if filepath_input ends with ".csv", if not, return an invalid input error
     if !check_file_extension(filepath_input, ".csv") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Input file path must end with '.csv'"));
@@ -1945,9 +1946,65 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
     // Since aishub does not provide information on cargo on board, set cargo on board to None
     let cargo_on_board = None;
 
+    // Init which row to start from
+    let mut entry_row_to_start = 0;
+    let num_entries = csv_reader.records().count(); // Takes us to the last entry
+
+    // Read the CSV file again to start from the beginning
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+
+    // Check if navigation status filter is in use
+    if navigation_status_filter.is_some() {
+        // Loop through the records of the aishub data collector shiplog until we find an entry which has the same navigation status
+        while entry_row_to_start < num_entries {
+            let result = csv_reader.records().next().expect("Could not get next result from csv file");
+            match result {
+                Ok(entry) => {
+                    // Get navigation status
+                    let navstat = match entry.get(16).unwrap().parse::<u8>() {
+                        Ok(n) => Some(n),
+                        Err(_) => None,
+                    };
+                    println!("Navigation status in entry {}: {:?}", entry_row_to_start, navstat.unwrap());
+                    // If there is no navstat in the aishub shiplog then increment entry row to start and continue to next loop
+                    if navstat == None {
+                        entry_row_to_start += 1;
+                        continue;
+                    }
+                    // If navigation status matches the filter then exit the loop
+                    if navstat.unwrap() == navigation_status_filter.unwrap() as u8 {
+                        println!("Heyy it's the same!! Breaking out of the loop");
+                        // We found an entry with the same navigation status, break out of the loop and continue with the rest of the function
+                        break;
+                    }
+                    // If the navigation status does not match the filter, increment the starting row 
+                    entry_row_to_start += 1;
+                },
+                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error reading aishub_data_collector csv file: {}", e))),
+            }
+        }
+
+        // If no entry with the same navigation status is found (entry row to start is the same as the number of rows), return an error which explains the situation
+        if entry_row_to_start >= num_entries {
+            return Err(io::Error::new(io::ErrorKind::Other, format!("Could not find any shiplog entry in aishub shiplog csv file with a navigation status: {:?}", navigation_status_filter.unwrap())));
+        }
+    }
+
+    // Start new CSV file reader to start from the beginning
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+
+
     // Get the initial and final coordinates
     // Init coordinates_initial
-    let first_record = match csv_reader.records().next().expect("Could not get first entry from file") {
+    let first_record = match csv_reader.records().nth(entry_row_to_start).expect("Could not get first entry from file") {
         Ok(r) => r,
         Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Error getting first record from aishub_data_collector file: {}", e)))?,
     };
@@ -1984,6 +2041,11 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
         .has_headers(true)
         .from_path(filepath_input)
         .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+
+    // Move to the starting row if the entry row is not zero
+    if entry_row_to_start != 0 {
+        let _ = csv_reader.records().nth(entry_row_to_start - 1);
+    }
 
     // Loop through all lines of file, append each line to the ship log
     for result in csv_reader.records() {
@@ -2025,7 +2087,22 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
                 let longitude = entry.get(13).unwrap().parse::<f64>().unwrap()/600000.0;
                 let _mmsi = entry.get(14);
                 let _name = entry.get(15);
-                let navstat = entry.get(16).expect("Could not get navstat from file").parse::<u8>().unwrap();
+                let navstat: Option<u8> = match entry.get(16) {
+                    Some(n) => Some(n.parse::<u8>().unwrap()),
+                    None => None
+                };
+                // If navigation status filter is in use, check if navstat matches navigation status filter, if not skip this entry
+                if navigation_status_filter.is_some() {
+                    // If the filter is in use and we do not know the navstat of this entry then skip this entry since we can not confirm it is the same as the filter
+                    if navstat.is_none() {
+                        continue;
+                    }
+                    // If we make it here then there is a valid navstat value
+                    // Check if it matches the navigation status filter, if not then continue
+                    if navstat.unwrap() != navigation_status_filter.unwrap() as u8 {
+                        continue;
+                    }
+                }
                 let _pac = entry.get(17);
                 let _rot = entry.get(18);
                 // If sog is 1024 the value is unknown
@@ -2080,9 +2157,12 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
                 // Set true_bearing to angle between current location and final coordinates
                 let true_bearing = Some(geo::Haversine.bearing(coordinates_current, coordinates_final));
 
-                let navigation_status: Option<NavigationStatus> = match NavigationStatus::try_from(navstat) {
-                    Ok(status) => Some(status),
-                    Err(_) => None,                    
+                let navigation_status: Option<NavigationStatus> = match navstat {
+                    Some(n) => match NavigationStatus::try_from(n) {
+                                    Ok(status) => Some(status),
+                                    Err(_) => None,
+                                },
+                    None => None
                 };
 
                 // Add ship log entry
