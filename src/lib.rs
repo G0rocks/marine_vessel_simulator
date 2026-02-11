@@ -1917,6 +1917,19 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
     if !check_file_extension(filepath_output, ".csv") {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Output file path must end with '.csv'"));
     }
+    // Check if file is delimited with ';' and if not, return an error
+    // To do this, get the second column in the first row delimited by ';' and if it does not exist then assume the file is not delimited with ';'
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
+    let first_entry = csv_reader.records().next().unwrap().unwrap();
+    let column_2 = first_entry.get(1);
+    if column_2.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Input file must be delimited with ';'"));
+    }
 
     // Read the aishub ship log csv file into a Shiplog struct
     // Init ship logs vector
