@@ -131,6 +131,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
     (Option<f64>, Option<f64>,
         Option<f64>, Option<f64>,
         Option<time::Duration>, Option<time::Duration>,
+        Option<time::Duration>, Option<time::Duration>,
         Option<f64>, Option<f64>, u64) {
 
     // Read the CSV file
@@ -209,7 +210,6 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
                     cargo_on_trip = cargo_on_board_option;                    
                 }
 
-
                 // If current coord is not inital or final this is a working point, set current coordinates as last coordinates
                 if coordinates_current != coordinates_initial && coordinates_current != coordinates_final {
                     // Update last coordinates
@@ -245,6 +245,8 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
     let speed_std: Option<f64>;
     let cargo_mean: Option<f64>;
     let cargo_std: Option<f64>;
+    let travel_time_min: Option<time::Duration>;
+    let travel_time_max: Option<time::Duration>;
     let travel_time_mean: Option<time::Duration>;
     let travel_time_std: Option<time::Duration>;
     let dist_mean: Option<f64>;
@@ -288,6 +290,11 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
             travel_time_std = None;
         }
     }
+
+    // Find min and max travel times
+    travel_time_min = travel_time_vec.iter().min().cloned();
+    travel_time_max = travel_time_vec.iter().max().cloned();
+
     match get_vec_f64_mean_and_std(&dist_vec) {
         Ok((mean, std)) => {
             dist_mean = Some(mean);
@@ -300,7 +307,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
         }
     }
     // Return the values
-    return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
+    return (speed_mean, speed_std, cargo_mean, cargo_std, travel_time_min, travel_time_max, travel_time_mean, travel_time_std, dist_mean, dist_std, num_trips)
 }
 
 /// Saves the given parameters to a csv file at csv_file_path
