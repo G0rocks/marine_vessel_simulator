@@ -1764,7 +1764,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
             // If not interactive terminal, print progressbar manually
             if is_interactive_terminal == false {
                 let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
-            println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
+                println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
             }   // End if
         }   // End if
     }   // End for loop
@@ -2160,10 +2160,20 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
         .has_headers(true)
         .from_path(filepath_input)
         .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
-    let first_entry = csv_reader.records().next().unwrap().unwrap();
+    let first_entry = csv_reader.records().next();
+    // if first line is empty, return error
+    if first_entry.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Input file {:?} does not have any data", filepath_input)));
+    }
+    let first_entry = first_entry.expect(format!("First entry in .csv file {:?} returned None", filepath_input).as_str()).unwrap();
     let column_2 = first_entry.get(1);
     if column_2.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Input file must be delimited with ';'"));
+    }
+    // Make sure there are at least 2 lines, if not then return error
+    let num_lines = csv_reader.records().count();
+    if num_lines < 2 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Input file {:?} needs to have at least 2 lines of data", filepath_input)));
     }
 
     // Read the aishub ship log csv file into a Shiplog struct
@@ -2242,11 +2252,11 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
         Ok(r) => r,
         Err(e) => Err(io::Error::new(io::ErrorKind::Other, format!("Error getting first record from aishub_data_collector file: {}", e)))?,
     };
-    let latitude = match first_record.get(12).unwrap().parse::<f64>() {
+    let latitude = match first_record.get(12).expect("Could not get latitude from first record").parse::<f64>() {
         Ok(v) => v/600000.0,
         Err(e) => panic!("Error getting initial coordinates from aishub_data_collector csv file: {}", e),
     };
-    let longitude = match first_record.get(13).unwrap().parse::<f64>() {
+    let longitude = match first_record.get(13).expect("Could not get longitude from first record").parse::<f64>() {
         Ok(v) => v/600000.0,
         Err(e) => panic!("Error getting initial coordinates from aishub_data_collector csv file: {}", e),
     };
