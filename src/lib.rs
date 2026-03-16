@@ -1570,6 +1570,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     let working_file_path_min: String = working_file_path.replace(".csv", "_min.csv");
     let working_file_path_mean: String = working_file_path.replace(".csv", "_mean.csv");
     let working_file_path_max: String = working_file_path.replace(".csv", "_max.csv");
+    let working_file_path_source: String = working_file_path.replace(".csv", "_source_data.csv");
 
     // Get working degree segment size from degree_segment_size and evaluate if it is so that 180° are divisible by it
     let working_degree_segment_size: f64 = degree_segment_size.unwrap_or_else(|| 5.0);
@@ -2073,7 +2074,54 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     // Flush and close the writer
     writer_max.flush()?;
 
+    // Save the source data
+    // Create a CSV writer with a semicolon delimiter
+    let mut writer_source_data = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(working_file_path_source)?;
 
+    // Write the header
+    let mut header_vec: Vec<String> = Vec::new();
+    // Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
+    header_vec.push("AWA [°]".to_string());
+    // If knots, format in knots
+    if true_if_knots_false_if_meters_per_second {
+        header_vec.push("AWS [knots]".to_string());
+        header_vec.push("Vessel speed through water [knots]".to_string());
+    } // Otherwise use meters per second (preferred)
+    else {
+        header_vec.push("AWS [m/s]".to_string());
+        header_vec.push("Vessel speed through water [m/s]".to_string());
+    }
+    
+    writer_source_data.write_record(&header_vec)?;
+
+    // Write the standard_data_vector into the csv file
+    for row in polar_plot_data_vector.iter() {
+        // Init empty record to write
+        let mut record: Vec<String> = Vec::new();
+
+        // Add the first cell (angle) to the record
+        record.push(row[0].to_string());
+
+        // Add the second and third cells (speeds) to the record
+        // If knots, transform to knots
+        if true_if_knots_false_if_meters_per_second {
+            record.push((row[1] * KNOTS_TO_METERS_PER_SECOND).to_string());
+            record.push((row[2] * KNOTS_TO_METERS_PER_SECOND).to_string());
+        } // Otherwise, use meters_per_second
+        else {
+            record.push(row[1].to_string());
+            record.push(row[2].to_string());
+        }
+
+        // Write the record
+        writer_source_data.write_record(&record)?;
+    }
+
+    // Flush and close the writer
+    writer_source_data.flush()?;
 
     // Finish progress bar
     simulation.progress_bar.as_ref().unwrap().finish();
