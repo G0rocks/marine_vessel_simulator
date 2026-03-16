@@ -1546,7 +1546,12 @@ pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(),
 /// Function that takes generates and saves a polar speed plot csv file
 /// for a wind propelled vessel.
 /// Based on this issue: https://github.com/G0rocks/marine_vessel_simulator/issues/50
-/// The file_path is where the result will be saved as a csv file
+/// The file_path is where the results will be saved as a csv file.
+/// The min file contains the minimum vessel speed through water for each apparent wind angle and apparent wind speed segment.
+/// The max file contains the maximum vessel speed through water for each apparent wind angle and apparent wind speed segment.
+/// The mean file contains the mean vessel speed through water for each apparent wind angle and apparent wind speed segment.
+/// The source data file contains the source data used to compute the min, mean and max. Made from the polar plot data vector.
+/// The csv files can be used to make a polar plot in openCPN or similar programs.
 /// Until this issue has been dealt with (https://github.com/G0rocks/marine_vessel_simulator/issues/42) then marine_vessel_simulator does not support using the polar plot but it can be uploaded to openCPN or similar programs to use them.
 /// The polar plot data vector columns are: Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
 /// The navigation status filter will set it so that the polar speed plot is made up of only ship log entries which are logged under the same status. Set to None to use all values in the ship log.
@@ -1561,6 +1566,10 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     if file_path.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>() != ".csv" {
         working_file_path = file_path.to_owned() + ".csv";
     }
+    // Make file paths for all the polar plot data files
+    let working_file_path_min: String = working_file_path.replace(".csv", "_min.csv");
+    let working_file_path_mean: String = working_file_path.replace(".csv", "_mean.csv");
+    let working_file_path_max: String = working_file_path.replace(".csv", "_max.csv");
 
     // Get working degree segment size from degree_segment_size and evaluate if it is so that 180° are divisible by it
     let working_degree_segment_size: f64 = degree_segment_size.unwrap_or_else(|| 5.0);
@@ -1763,7 +1772,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     // Column 0 is the angle of the apparent wind in degrees
     // column 1-40 contains tuples which are (n, VTW.magnitude) where n signifies how many values have been used to generate the average value VTW.magnitude which is the magnitude of the Velocity through water vector.
     // Note the VTW.magnitude is given in m/s in 1 m/s increments
-    let mut standard_data_vector: Vec<Vec<(usize, Option<f64>)>> = Vec::new();
+    let mut standard_data_vector_mean: Vec<Vec<(usize, Option<f64>)>> = Vec::new();
 
     // First find how many degree and wind speed segments we have
     let num_degree_segments: u16 = (180.0/working_degree_segment_size) as u16 + 1;   // +1 for the degrees since both 0° and 180° are included  // Keeping this even though it is currently unused since when this issue gets resolved we can use it again: https://github.com/G0rocks/marine_vessel_simulator/issues/56
@@ -1778,10 +1787,14 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         for _k in 0..num_wind_speed_segments {
             sub_vec.push((0, None));
         }
-        standard_data_vector.push(sub_vec);
+        standard_data_vector_mean.push(sub_vec);
     }
 
-    // Now that all the data has been collected for the polar plot, we should loop through it and standardize it to be formatted in the similar numbers that the weather routing programs would use it
+    // Make a copy of the standard data vector for the minimum and maximum values as well
+    let mut standard_data_vector_min: Vec<Vec<(usize, Option<f64>)>> = standard_data_vector_mean.clone();
+    let mut standard_data_vector_max: Vec<Vec<(usize, Option<f64>)>> = standard_data_vector_mean.clone();
+
+    // Now that all the data has been collected for the polar plot, we loop through it and standardize it to be formatted in the similar numbers that the weather routing programs would use it
     for i in 0..polar_plot_data_vector.len() {
         // We only need one side of the polar plot, let's use the right side, everything else can be mirrored afterwards (effectively potentially doubles the available data)
         if polar_plot_data_vector[i][0] > 180.0 {
@@ -1821,28 +1834,68 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         // Find the row in the standard_data_vector that corresponds to this nearest angle
         let column: usize = (nearest_wind_speed/working_wind_speed_segment_size) as usize;
 
-        // Imrpovement idea: If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
+        // Input the value into the standard data vectors
+        // Inputting into min vector
+        if standard_data_vector_min[row][column].1.is_some() {
+            // Get current number of values used to make the minimum
+            let current_n: usize = standard_data_vector_min[row][column].0;
+            // Get current minimum vessel speed
+            let current_speed: f64 = standard_data_vector_min[row][column].1.unwrap();
+            // If the new value is lesser than the current value in the standard data vector, replace it
+            if polar_plot_data_vector[i][2] < current_speed {
+                standard_data_vector_min[row][column] = (current_n + 1, Some(polar_plot_data_vector[i][2]));
+            }
+        }
+        // Otherwise if this is the first value, put it directly into the standard_data_vector and set the counter to 1.
+        else {
+            standard_data_vector_min[row][column] = (1, Some(polar_plot_data_vector[i][2]));
+        }
+
+        // Inputting into mean vector
+
+        // TODO: Improvement idea: If there are any values in the standard_data_vector in that index and the index that surrounds the current value, linearly interpolate the current value in the direction of the index
         // Let's average it directly and skip the linear interpolation for now, adding an issue about it
-        if standard_data_vector[row][column].1.is_some() {
+        if standard_data_vector_mean[row][column].1.is_some() {
             // Get current number of values used to make the average
-            let current_n: usize = standard_data_vector[row][column].0;
+            let current_n: usize = standard_data_vector_mean[row][column].0;
             // Get current average vessel speed
-            let current_speed: f64 = standard_data_vector[row][column].1.unwrap();
+            let current_speed: f64 = standard_data_vector_mean[row][column].1.unwrap();
             // Make new average vessel speed by adding the new value and incrementing the number of values used to make the average
-            standard_data_vector[row][column] = (current_n + 1, Some((current_speed*(current_n as f64) + polar_plot_data_vector[i][2])/((current_n + 1) as f64)));
+            standard_data_vector_mean[row][column] = (current_n + 1, Some((current_speed*(current_n as f64) + polar_plot_data_vector[i][2])/((current_n + 1) as f64)));
         }
         // Otherwise if this is the first value, assume it stays the same and put it directly into the standard_data_vector
         else {
-            standard_data_vector[row][column] = (1, Some(polar_plot_data_vector[i][2]));
+            standard_data_vector_mean[row][column] = (1, Some(polar_plot_data_vector[i][2]));
+        }
+
+        // Inputting into max vector
+        if standard_data_vector_max[row][column].1.is_some() {
+            // Get current number of values used to make the maximum
+            let current_n: usize = standard_data_vector_max[row][column].0;
+            // Get current maximum vessel speed
+            let current_speed: f64 = standard_data_vector_max[row][column].1.unwrap();
+            // If the new value is greater than the current value in the standard data vector, replace it
+            if polar_plot_data_vector[i][2] > current_speed {
+                standard_data_vector_max[row][column] = (current_n + 1, Some(polar_plot_data_vector[i][2]));
+            }
+        }
+        // Otherwise if this is the first value, put it directly into the standard_data_vector and set the counter to 1.
+        else {
+            standard_data_vector_max[row][column] = (1, Some(polar_plot_data_vector[i][2]));
         }
     }
 
+    // TODO See issue https://github.com/G0rocks/marine_vessel_simulator/issues/62
+    // Check if standard_data_vector contains any values. If it does not then return error
+    
+
     // Now that the underlying polar plot data is ready, save the results to a csv file
+    // Saving the file with the minimum data
     // Create a CSV writer with a semicolon delimiter
-    let mut wtr = csv::WriterBuilder::new()
+    let mut writer_min = csv::WriterBuilder::new()
         .delimiter(b';')
         .has_headers(true)
-        .from_path(working_file_path)?;
+        .from_path(working_file_path_min)?;
 
     // Write the header
     let mut header_vec: Vec<String> = Vec::new();
@@ -1858,10 +1911,10 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         }
     }
     
-    wtr.write_record(&header_vec)?;
+    writer_min.write_record(&header_vec)?;
 
     // Write the standard_data_vector into the csv file
-    for row in standard_data_vector.iter() {
+    for row in standard_data_vector_min.iter() {
         // Init empty record to write
         let mut record: Vec<String> = Vec::new();
         // Add the wind angle to the first column
@@ -1892,11 +1945,135 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         }
 
         // Write the record
-        wtr.write_record(&record)?;
+        writer_min.write_record(&record)?;
     }
 
     // Flush and close the writer
-    wtr.flush()?;
+    writer_min.flush()?;
+
+    // Saving the file with the mean data
+    // Create a CSV writer with a semicolon delimiter
+    let mut writer_mean = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(working_file_path_mean)?;
+
+    // Write the header
+    let mut header_vec: Vec<String> = Vec::new();
+    // First column in the header is "TWA\TWS" and not "wind angle [°]" because that is what openCPN uses
+    header_vec.push("TWA\\TWS".to_string());
+    for i in 1..(num_wind_speed_segments+1) {
+        // If knots, format in knots
+        if true_if_knots_false_if_meters_per_second {
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size*1.94384));
+        } // Otherwise use meters per second (preferred)
+        else {
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size));
+        }
+    }
+    
+    writer_mean.write_record(&header_vec)?;
+
+    // Write the standard_data_vector_mean into the csv file
+    for row in standard_data_vector_mean.iter() {
+        // Init empty record to write
+        let mut record: Vec<String> = Vec::new();
+        // Add the wind angle to the first column
+        // record.push(row[0].0);
+
+        // For the rest of the row, if the boat speed is None, add an empty string, else, add the boat speed to the record
+        // Note: The first cell should always be some as it should include the apparent wind angle
+        for (i, cell) in row.iter().enumerate() {
+            // If the value is Some, add it
+            if cell.1.is_some() {
+                // If it's the first column, just add it since it is the angle of the wind
+                if i == 0 {
+                    record.push(cell.1.unwrap().to_string());
+                } // Otherwise, check if we're using knots or meters per second
+                else {
+                    // If knots, transform to knots
+                    if true_if_knots_false_if_meters_per_second {
+                        record.push((cell.1.unwrap() * 1.94384).to_string());
+                    } // Otherwise, use meters_per_second
+                    else {
+                        record.push(cell.1.unwrap().to_string());
+                    }
+                }
+            } // Otherwise, add empty string
+            else {
+                record.push(String::new());
+            }
+        }
+
+        // Write the record
+        writer_mean.write_record(&record)?;
+    }
+
+    // Flush and close the writer
+    writer_mean.flush()?;
+    
+    // Saving the file with the maximum data
+    // Create a CSV writer with a semicolon delimiter
+    let mut writer_max = csv::WriterBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(working_file_path_max)?;
+
+    // Write the header
+    let mut header_vec: Vec<String> = Vec::new();
+    // First column in the header is "TWA\TWS" and not "wind angle [°]" because that is what openCPN uses
+    header_vec.push("TWA\\TWS".to_string());
+    for i in 1..(num_wind_speed_segments+1) {
+        // If knots, format in knots
+        if true_if_knots_false_if_meters_per_second {
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size*1.94384));
+        } // Otherwise use meters per second (preferred)
+        else {
+            header_vec.push(format!("{}", (i as f64)*working_wind_speed_segment_size));
+        }
+    }
+    
+    writer_max.write_record(&header_vec)?;
+
+    // Write the standard_data_vector into the csv file
+    for row in standard_data_vector_max.iter() {
+        // Init empty record to write
+        let mut record: Vec<String> = Vec::new();
+        // Add the wind angle to the first column
+        // record.push(row[0].0);
+
+        // For the rest of the row, if the boat speed is None, add an empty string, else, add the boat speed to the record
+        // Note: The first cell should always be some as it should include the apparent wind angle
+        for (i, cell) in row.iter().enumerate() {
+            // If the value is Some, add it
+            if cell.1.is_some() {
+                // If it's the first column, just add it since it is the angle of the wind
+                if i == 0 {
+                    record.push(cell.1.unwrap().to_string());
+                } // Otherwise, check if we're using knots or meters per second
+                else {
+                    // If knots, transform to knots
+                    if true_if_knots_false_if_meters_per_second {
+                        record.push((cell.1.unwrap() * 1.94384).to_string());
+                    } // Otherwise, use meters_per_second
+                    else {
+                        record.push(cell.1.unwrap().to_string());
+                    }
+                }
+            } // Otherwise, add empty string
+            else {
+                record.push(String::new());
+            }
+        }
+
+        // Write the record
+        writer_max.write_record(&record)?;
+    }
+
+    // Flush and close the writer
+    writer_max.flush()?;
+
+
 
     // Finish progress bar
     simulation.progress_bar.as_ref().unwrap().finish();
