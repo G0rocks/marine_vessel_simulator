@@ -27,6 +27,8 @@ pub use crate::vessels::*; // Import the simulators module
 
 // Constants
 //----------------------------------------------------
+/// If you have a number in meters per second and you need to know how many knots it is then multiply this constant with the value in meters per second.
+const KNOTS_TO_METERS_PER_SECOND: f64 = 1.94384;
 
 
 // Structs and enums
