@@ -2505,7 +2505,7 @@ pub fn format_shipping_log_data(input_folder: &String, output_folder: &String,) 
 /// Only .csv files formatted by aishub_data_collector can be in the input_folder
 /// All files in the output_folder that are named the same name as the files in the input_folder will be overwritten.
 /// TODO: Currently filters data collected from aishub_data_collector. Should filter marine_vessel_simulator data. Issue posted here: https://github.com/G0rocks/marine_vessel_simulator/issues/68
-pub fn filter_shipping_log_data_by_navstat(input_folder: &String, output_folder: &String, navstat: NavigationStatus) -> Result<(), io::Error> {
+pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, navstat: NavigationStatus) -> Result<(), io::Error> {
     // Get list of all files in input folder
     let files: std::fs::ReadDir = std::fs::read_dir(std::path::Path::new(input_folder)).expect(format!("Error reading input folder {:?}", input_folder).as_str());
 
