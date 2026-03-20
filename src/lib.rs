@@ -1155,7 +1155,7 @@ pub fn csv_to_ship_log(csv_file_path: &str) -> Result<Vec<ShipLogEntry>, io::Err
                     "" => None,
                     draft => Some(draft.parse::<f64>().unwrap()),
                 };
-                let navigation_status: Option<NavigationStatus> = match NavigationStatus::try_from(entry.get(10).unwrap().parse::<u8>().unwrap()) {
+                let navigation_status: Option<NavigationStatus> = match NavigationStatus::try_from(entry.get(10).unwrap().parse::<u8>().expect(format!("Error getting navigation status from {:?}. Entry: {:?}", csv_file_path, entry).as_str())) {
                     Ok(status) => Some(status),
                     Err(_) => None,                    
                 }; //Some(entry.get(10).map(|s| s.parse::<u8>().expect("Failed to parse navigation status")).expect("Failed to parse navigation status"));
