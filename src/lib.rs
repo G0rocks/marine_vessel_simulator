@@ -2530,6 +2530,12 @@ pub fn filter_shipping_log_data_by_navstat(input_folder: &String, output_folder:
         }
 
         // Save file in the output directory
+        // Check if data in file is at least 1 data point, if no data point, skip to next file
+        if record_vec.len() < 2 {
+            // Skip to next file
+            continue;
+        }
+
         // Check if output folder exists, if not, create it
         if !std::path::Path::new(output_folder).exists() {
             let _ = match std::fs::create_dir_all(output_folder) {
