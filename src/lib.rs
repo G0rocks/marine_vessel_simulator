@@ -2466,9 +2466,45 @@ pub fn check_file_extension(filepath: &str, extension: &str) -> bool {
     }
 }
 
-/// Function that takes all the csv files in the input folder, filters them by the given navigational status and out
+/// Function that formats every file, not just a single file, in the input folder as long as they are from aishub_data_collector and formats them to work with marine_vessel_simulator 
+pub fn format_shipping_log_data(input_folder: &String, output_folder: &String,) -> Result<(), io::Error> {
+    // Get list of all files in input folder
+    let files: std::fs::ReadDir = std::fs::read_dir(std::path::Path::new(input_folder)).expect(format!("Error reading input folder {:?}", input_folder).as_str());
+
+    // Loop through all the files
+    for file in files {
+        // Get DirEntry
+        let file: std::fs::DirEntry = file.expect("Error reading file in input folder");
+
+        // Check if the file is a .csv file, if not, skip this file
+        let filename = file.file_name();
+        let filename: &str = filename.to_str().unwrap();
+        if !check_file_extension(filename, ".csv") {
+            // Notify user and skip file
+            println!("File {:?} is not a .csv file. Skipping this file", filename);
+            continue;
+        }
+
+        // Get input and output paths
+        let input_file_path: String = input_folder.clone() + "/" + filename;
+        let output_file_path: String = output_folder.clone() + "/" + filename;
+
+        // Run marine_vessel_simulator formatting function on each file
+        // Output formatted file into output folder
+        let _ = match aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(input_file_path.as_str(), output_file_path.as_str(), None) {
+            Ok(_) => {},
+            Err(e) => println!("Could not format file {:?}. Error: {}", input_file_path, e),
+        };
+    }
+
+    // return ok
+    return Ok(());
+}
+
+/// Function that takes all the csv files in the input folder, filters them by the given navigational status and outputs them to the output folder
 /// Only .csv files formatted by aishub_data_collector can be in the input_folder
 /// All files in the output_folder that are named the same name as the files in the input_folder will be overwritten.
+/// TODO: Currently filters data collected from aishub_data_collector. Should filter marine_vessel_simulator data. Issue posted here: https://github.com/G0rocks/marine_vessel_simulator/issues/68
 pub fn filter_shipping_log_data_by_navstat(input_folder: &String, output_folder: &String, navstat: NavigationStatus) -> Result<(), io::Error> {
     // Get list of all files in input folder
     let files: std::fs::ReadDir = std::fs::read_dir(std::path::Path::new(input_folder)).expect(format!("Error reading input folder {:?}", input_folder).as_str());
