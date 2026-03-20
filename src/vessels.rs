@@ -64,6 +64,13 @@ pub struct ShipLogEntry {
     Aground                     = 6,
     EngagedInFishing            = 7,
     UnderwaySailing             = 8,
+    ReservedForAmendmentForHSC  = 9,
+    ReservedForAmendmentForWIG  = 10,
+    ReservedForFuture11         = 11,
+    ReservedForFuture12         = 12,
+    ReservedForFuture13         = 13,
+    ActiveAisSart               = 14,
+    NotDefinedOrDefault         = 15,
 }
 
 
@@ -81,6 +88,13 @@ impl TryFrom<u8> for NavigationStatus {
             6 => Ok(NavigationStatus::Aground),
             7 => Ok(NavigationStatus::EngagedInFishing),
             8 => Ok(NavigationStatus::UnderwaySailing),
+            9 => Ok(NavigationStatus::ReservedForAmendmentForHSC),
+            10 => Ok(NavigationStatus::ReservedForAmendmentForWIG),
+            11 => Ok(NavigationStatus::ReservedForFuture11),
+            12 => Ok(NavigationStatus::ReservedForFuture12),
+            13 => Ok(NavigationStatus::ReservedForFuture13),
+            14 => Ok(NavigationStatus::ActiveAisSart),
+            15 => Ok(NavigationStatus::NotDefinedOrDefault),
             _ => Err(()),
         }
     }
