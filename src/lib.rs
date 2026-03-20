@@ -2170,6 +2170,12 @@ pub fn aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(filepath_input:
     if column_2.is_none() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Input file must be delimited with ';'"));
     }
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(filepath_input)
+        .expect(format!("Failed to open file: {}\n", filepath_input).as_str());
     // Make sure there are at least 2 lines, if not then return error
     let num_lines = csv_reader.records().count();
     if num_lines < 2 {
