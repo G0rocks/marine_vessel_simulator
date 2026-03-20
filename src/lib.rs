@@ -2555,8 +2555,12 @@ pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, n
                 }
             };
 
-            // Get the navigational status. 2026-03-11, aishub data collector has the navstat in column 16 (starting from zero)
-            let record_navstat: u8 = record[16].parse().unwrap();
+            // Get the navigational status. 2026-03-20, marine vessel simulator has the navstat in column 10 (starting from zero)
+            // If there is an error getting the navigational status (for example if no navstat available), skip this record
+            let record_navstat: u8 = match record[10].parse(){
+                Ok(r) => r,
+                Err(_) => continue,
+            };
 
             // If the navigational status is correct, save the line
             if record_navstat == navstat as u8 {
