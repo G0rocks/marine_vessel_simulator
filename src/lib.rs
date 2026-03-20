@@ -2417,7 +2417,7 @@ pub fn format_shipping_log_data(input_folder: &String, output_folder: &String,) 
 
         // Run marine_vessel_simulator formatting function on each file
         // Output formatted file into output folder
-        let _ = match aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(input_file_path.as_str(), output_file_path.as_str(), None) {
+        let _ = match aishub_shiplog_csv_to_marine_vessel_simulator_shiplog_csv(input_file_path.as_str(), output_file_path.as_str()) {
             Ok(_) => {},
             Err(e) => println!("Could not format file {:?}. Error: {}", input_file_path, e),
         };
@@ -2427,11 +2427,12 @@ pub fn format_shipping_log_data(input_folder: &String, output_folder: &String,) 
     return Ok(());
 }
 
-/// Function that takes all the csv files in the input folder, filters them by the given navigational status and outputs them to the output folder
+/// Function that takes all the csv files in the input folder, filters them by the given values (if None then does not filter) and outputs them to the output folder
 /// Only .csv files formatted by aishub_data_collector can be in the input_folder
 /// All files in the output_folder that are named the same name as the files in the input_folder will be overwritten.
-/// TODO: Currently filters data collected from aishub_data_collector. Should filter marine_vessel_simulator data. Issue posted here: https://github.com/G0rocks/marine_vessel_simulator/issues/68
-pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, navstat: NavigationStatus) -> Result<(), io::Error> {
+/// navstat filter. Only ship log entries that have the same navigational status as given are included in the output file.
+/// min_vel filter. Minimum velocity, only ship log entries with a velocity strictly higher than the minimum are included in the output file. This means if the min_vel is zero then velocities of zero are not included but all higher velocities are. 
+pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, min_vel: Option<f64>, navstat: Option<NavigationStatus>) -> Result<(), io::Error> {
     // Get list of all files in input folder
     let files: std::fs::ReadDir = std::fs::read_dir(std::path::Path::new(input_folder)).expect(format!("Error reading input folder {:?}", input_folder).as_str());
 
@@ -2449,56 +2450,53 @@ pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, n
             continue;
         }
 
-        // Make a csv reader
-        let mut reader = match csv::ReaderBuilder::new()
-            .has_headers(true)
-            .delimiter(b';')
-            .from_path(file.path()) {
-                Ok(r) => r,
-                Err(e) => panic!("Error reading file {:?}: {}", file, e),
-            };
-
-        // Get the header
-        let header: &csv::StringRecord = match reader.headers() {
-            Ok(h) => h,
-            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error getting header from file {:?}: {}", filename, e)))
+        // Get shiplogs from csv file. If there is an error, notify user and skip this file
+        let input_filepath = input_folder.clone() + "/" + filename;
+        let input_shiplog = match csv_to_ship_log(input_filepath.as_str()){
+            Ok(s) => s,
+            Err(e) => {
+                println!("An error occured while getting shiplog data from {:?}\nSkipping this file\nError message: {}", input_filepath.as_str(), e);
+                continue;
+            },
         };
 
-        // Init empty vector of records
-        let mut record_vec: Vec<csv::StringRecord> = vec![];
+        // init empty output shiplog
+        let mut output_shiplog: Vec<ShipLogEntry> = vec![];
 
-        // Set the first record_vec line to be the headers
-        record_vec.push(header.clone());
-
-        // Go through every line of the file
-        for result in reader.records() {
-            // Validate that we can read the record
-            let record = match result {
-                Ok(r) => r,
-                Err(_) => {
-                    // Skip this record
+        // Loop through each entry in the shiplog
+        for entry in input_shiplog {
+            // For each entry, if it passes all the filters, add it to the output shiplog, if not, continue to next entry
+            // Check if velocity filter is in use
+            if min_vel.is_some() {
+                // Check if entry contains velocity, if not then continue to next entry
+                if entry.velocity.is_none() {
                     continue;
                 }
-            };
+                // Check if entries velocity is higher than min_vel, if not then continue to next entry
+                if entry.velocity.unwrap().magnitude <= min_vel.unwrap() {
+                    continue;
+                }
+            }
 
-            // Get the navigational status. 2026-03-20, marine vessel simulator has the navstat in column 10 (starting from zero)
-            // If there is an error getting the navigational status (for example if no navstat available), skip this record
-            let record_navstat: u8 = match record[10].parse(){
-                Ok(r) => r,
-                Err(_) => continue,
-            };
+            // Check if navigational status filter is in use
+            if navstat.is_some() {
+                // Check if entry contains navstat, if not then continue to next entry
+                if entry.navigation_status.is_none() {
+                    continue;
+                }
+                // Check if navigation status of input shiplog entry matches filter, if not, skip this entry and continue to next one
+                if entry.navigation_status.unwrap() != navstat.unwrap() {
+                    continue;
+                }
+            }
 
-            // If the navigational status is correct, save the line
-            if record_navstat == navstat as u8 {
-                // Push record to record vector
-                record_vec.push(record);
-            } 
+            // Add entry to output shiplog since all filters have been passed
+            output_shiplog.push(entry);
         }
 
-        // Save file in the output directory
-        // Check if data in file is at least 1 data point, if no data point, skip to next file
-        if record_vec.len() < 2 {
-            // Skip to next file
+        // If output shiplog is empty, do not make a filtered file, notify user and skip to next file
+        if output_shiplog.len() < 1 {
+            println!("No data left after filtering {:?}", input_filepath);
             continue;
         }
 
@@ -2510,11 +2508,8 @@ pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, n
             };
         }
 
-        // Get the filename
-        let filename = file.file_name();
-
         // Make output filepath
-        let output_filepath: String = output_folder.clone() + "/" + filename.to_str().expect("Could not make str out of OsString");
+        let output_filepath: String = output_folder.clone() + "/" + filename;
 
         // Check if file exists, if it does, delete it
         if std::path::Path::new(&output_filepath).exists() {
@@ -2523,24 +2518,10 @@ pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, n
                 Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error removing file {:?}: {}", output_filepath, e))),
             };
         }
-        // Create file with headers
-        // Create CSV writer
-        let mut writer: csv::Writer<std::fs::File> = csv::WriterBuilder::new()
-            .delimiter(b';')
-            .from_writer(std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&output_filepath)?);
 
-        // Loop through each record in the record_vec
-        for record in record_vec {
-            // Append data to file
-            match writer.write_record(&record) {
-                Ok(_) => {},
-                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error writing record ({:?}) to file {:?} at {:?}: {}", record, filename, output_folder, e)))
-            };
-        }
-    }
+        // Save output shiplog to output folder and continue to next file
+        let _ = ship_logs_to_csv(output_filepath.as_str(), &output_shiplog);
+    }   // End loop through files
 
     // Return ok
     return Ok(());
