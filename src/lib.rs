@@ -2460,6 +2460,115 @@ pub fn check_file_extension(filepath: &str, extension: &str) -> bool {
     }
 }
 
+/// Function that takes all the csv files in the input folder, filters them by the given navigational status and out
+/// Only .csv files formatted by aishub_data_collector can be in the input_folder
+/// All files in the output_folder that are named the same name as the files in the input_folder will be overwritten.
+pub fn filter_shipping_log_data_by_navstat(input_folder: &String, output_folder: &String, navstat: NavigationStatus) -> Result<(), io::Error> {
+    // Get list of all files in input folder
+    let files: std::fs::ReadDir = std::fs::read_dir(std::path::Path::new(input_folder)).expect(format!("Error reading input folder {:?}", input_folder).as_str());
+
+    // Loop through all the files
+    for file in files {
+        // Get DirEntry
+        let file: std::fs::DirEntry = file.expect("Error reading file in input folder");
+
+        // Check if the file is a .csv file, if not, skip this file
+        let filename = file.file_name();
+        let filename: &str = filename.to_str().unwrap();
+        if !check_file_extension(filename, ".csv") {
+            // Notify user and skip file
+            println!("File {:?} is not a .csv file. Skipping this file", filename);
+            continue;
+        }
+
+        // Make a csv reader
+        let mut reader = match csv::ReaderBuilder::new()
+            .has_headers(true)
+            .delimiter(b';')
+            .from_path(file.path()) {
+                Ok(r) => r,
+                Err(e) => panic!("Error reading file {:?}: {}", file, e),
+            };
+
+        // Get the header
+        let header: &csv::StringRecord = match reader.headers() {
+            Ok(h) => h,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error getting header from file {:?}: {}", filename, e)))
+        };
+
+        // Init empty vector of records
+        let mut record_vec: Vec<csv::StringRecord> = vec![];
+
+        // Set the first record_vec line to be the headers
+        record_vec.push(header.clone());
+
+        // Go through every line of the file
+        for result in reader.records() {
+            // Validate that we can read the record
+            let record = match result {
+                Ok(r) => r,
+                Err(_) => {
+                    // Skip this record
+                    continue;
+                }
+            };
+
+            // Get the navigational status. 2026-03-11, aishub data collector has the navstat in column 16 (starting from zero)
+            let record_navstat: u8 = record[16].parse().unwrap();
+
+            // If the navigational status is correct, save the line
+            if record_navstat == navstat as u8 {
+                // Push record to record vector
+                record_vec.push(record);
+            } 
+        }
+
+        // Save file in the output directory
+        // Check if output folder exists, if not, create it
+        if !std::path::Path::new(output_folder).exists() {
+            let _ = match std::fs::create_dir_all(output_folder) {
+                Ok(_) => {},
+                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error creating directory {:?}: {}", output_folder, e)))
+            };
+        }
+
+        // Get the filename
+        let filename = file.file_name();
+
+        // Make output filepath
+        let output_filepath: String = output_folder.clone() + "/" + filename.to_str().expect("Could not make str out of OsString");
+
+        // Check if file exists, if it does, delete it
+        if std::path::Path::new(&output_filepath).exists() {
+            let _ = match std::fs::remove_file(&output_filepath) {
+                Ok(_) => {},
+                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error removing file {:?}: {}", output_filepath, e))),
+            };
+        }
+        // Create file with headers
+        // Create CSV writer
+        let mut writer: csv::Writer<std::fs::File> = csv::WriterBuilder::new()
+            .delimiter(b';')
+            .from_writer(std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&output_filepath)?);
+
+        // Loop through each record in the record_vec
+        for record in record_vec {
+            // Append data to file
+            match writer.write_record(&record) {
+                Ok(_) => {},
+                Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Error writing record ({:?}) to file {:?} at {:?}: {}", record, filename, output_folder, e)))
+            };
+        }
+    }
+
+    // Return ok
+    return Ok(());
+}
+
+
 // Set up tests here
 //-----------------------------------------------------------------------------------
 #[cfg(test)]
