@@ -392,6 +392,78 @@ pub fn save_shipping_logs_evaluation_to_csv(csv_file_path: &str, name_vec: Vec<&
 
 /// Visualize ship logs with plotly on map
 /// figure_file_path: Option<&str> - Path to the file where the figure will be saved. If None, the figure will not be saved to a file.
+pub fn plot_ship_logs(shiplogs: Vec<ShipLogEntry>, figure_file_path: Option<&str>) -> Result<(), io::Error> {
+    // Init vectors for coordinates
+    let mut y_vec: Vec<f64> = Vec::new();
+    let mut x_vec: Vec<f64> = Vec::new();
+
+    // Iterate through each entry of in the shiplog to draw the values
+    for entry in shiplogs {
+        // Add coordinates to vectors
+        x_vec.push(entry.coordinates_current.x());
+        y_vec.push(entry.coordinates_current.y());
+    }
+
+    // Setup trace of ship logs
+    let trace = plotly::ScatterGeo::new(y_vec, x_vec)
+                    .name("Ship logs")
+                    .mode(plotly::common::Mode::LinesMarkersText)
+                    .show_legend(true);  // ScatterGeo::new(latitudes, longitudes).name("Ship Logs").marker_color("blue"));
+
+    // Set layout as instructed by andrei-ng https://github.com/plotly/plotly.rs/pull/301
+    let layout = plotly::Layout::new()
+        .drag_mode(plotly::layout::DragMode::Zoom)
+        .margin(plotly::layout::Margin::new().top(20).left(10).bottom(30).right(10))
+        .auto_size(true)
+        .geo(
+            plotly::layout::LayoutGeo::new()
+                .showocean(true)
+                .showlakes(true)
+                .showcountries(true)
+                .showland(true)
+                .oceancolor(plotly::color::Rgb::new(0, 255, 255))
+                .lakecolor(plotly::color::Rgb::new(0, 255, 255))
+                .landcolor(plotly::color::Rgb::new(230, 145, 56))
+                .lataxis(
+                    plotly::layout::Axis::new()
+                        .show_grid(true)
+                        .grid_color(plotly::color::Rgb::new(102, 102, 102)),
+                )
+                .lonaxis(
+                    plotly::layout::Axis::new()
+                        .show_grid(true)
+                        .grid_color(plotly::color::Rgb::new(102, 102, 102)),
+                )
+                .projection(
+                    plotly::layout::Projection::new().projection_type(plotly::layout::ProjectionType::Orthographic),
+                ),
+        );
+
+    // Create a plotly figure with the coordinates
+    let mut figure = plotly::Plot::new();
+    // Add trace
+    figure.add_trace(trace);
+    // Set layout to orthographic
+    figure.set_layout(layout);
+    // Get configuration and make responsive for automatically sizing according to window size
+    let fig_config = figure.configuration().clone().responsive(true).fill_frame(true);
+    // Set config
+    figure.set_configuration(fig_config);
+
+    // Open plot
+    figure.show();
+
+    // Save the figure to a file if file path is provided
+    if let Some(file_path) = figure_file_path {
+        figure.write_html(file_path);
+    }
+
+    // Return Ok if all went well
+    return Ok(());
+}
+
+/// Visualize ship logs and the route with plotly on map
+/// figure_file_path: Option<&str> - Path to the file where the figure will be saved. If None, the figure will not be saved to a file.
 pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_path: &str, figure_file_path: Option<&str>) -> Result<(), io::Error> {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
