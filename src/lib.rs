@@ -204,7 +204,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
                 // Else then it's a working point or the endpoint and we can calculate the distance
                 else {
                     // Add the distance traveled from last coordinates
-                    dist = Haversine.distance(coordinates_last, coordinates_current);
+                    dist = Haversine.distance(coordinates_last, coordinates_current); // [m]
                     // Update trip distance
                     trip_dist += dist;
                     // Calculate the speed in m/s
@@ -1666,17 +1666,16 @@ pub fn save_sim_settings_to_file(file_path: &str, sim: Simulation) -> Result<(),
 /// The min file contains the minimum vessel speed through water for each apparent wind angle and apparent wind speed segment.
 /// The max file contains the maximum vessel speed through water for each apparent wind angle and apparent wind speed segment.
 /// The mean file contains the mean vessel speed through water for each apparent wind angle and apparent wind speed segment.
-/// The source data file contains the source data used to compute the min, mean and max. Made from the polar plot data vector.
+/// The source data file contains the source data used to compute the min, mean and max. Made from the polar plot data vector. Column 1 is the apparent wind angle, column 2 is the apparent wind speed, column 3 is the vessel speed through water, column 4 is the heading, column 5 is the wind speed (not apparent), column 6 is the wind angle (not apparent), column 7 is the ocean current speed (not apparent), column 8 is the ocean current angle (not apparent).
 /// The csv files can be used to make a polar plot in openCPN or similar programs.
 /// Until this issue has been dealt with (<https://github.com/G0rocks/marine_vessel_simulator/issues/42>) then marine_vessel_simulator does not support using the polar plot but it can be uploaded to openCPN or similar programs to use them.
 /// The polar plot data vector columns are: Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
-/// The navigation status filter will set it so that the polar speed plot is made up of only ship log entries which are logged under the same status. Set to None to use all values in the ship log.
 /// Warning: All calculations assume meters per second are being used and if knots are being used the vessel speed will be multiplied by 1.94384 to transform into knots and the columns (with the wind speed) will be multiplied by 2 (to ensure that the file can be opened by openCPN) meaning that if knots are used then the potentially there will be issues in using the data than if meters per second are used.
 /// Note: If not ocean current data is retrieved, the current is assumed to be flowing at zero meters per second
 /// Note: If no degree_segment_size is given, defaults to 5°. If a segment size is given it must be so that 180° is divisible by the segment size
 /// Note: If no wind_speed_segment_size is given, defaults to 1 m/s. If a segment size is given it must be so that 40 m/s is divisible by the segment size. Will always use m/s and not knots.
 /// Note: As of 2026-02-06 OpenCPN polar plugin only accepts values in degree increments of 5° and column increments of 2 (no unit). In order to generate a polar speed plot csv file which can be opened by this plugin the same constraints are put on the input degree and wind speed segment sizes, that is that they must be divisible by 5° and 2 m/s. Follow this issue for updates: <https://github.com/G0rocks/marine_vessel_simulator/issues/56>
-pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool, degree_segment_size: Option<f64>, wind_speed_segment_size: Option<f64>, navigation_status_filter: Option<NavigationStatus>) -> Result<Vec<Vec<f64>>, io::Error> {
+pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simulation, file_path: &str, true_if_knots_false_if_meters_per_second: bool, degree_segment_size: Option<f64>, wind_speed_segment_size: Option<f64>) -> Result<Vec<Vec<f64>>, io::Error> {
     // Add ".csv" to the end of the file path if it is not there already
     let mut working_file_path: String = file_path.to_owned();
     if file_path.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect::<String>() != ".csv" {
@@ -1687,6 +1686,11 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
     let working_file_path_mean: String = working_file_path.replace(".csv", "_mean.csv");
     let working_file_path_max: String = working_file_path.replace(".csv", "_max.csv");
     let working_file_path_source: String = working_file_path.replace(".csv", "_source_data.csv");
+
+    // Check if the file path already exist, if not create the folder
+    if !std::path::Path::new(&file_path).exists() {
+        std::fs::create_dir_all(std::path::Path::new(&file_path).parent().unwrap())?;
+    }
 
     // Get working degree segment size from degree_segment_size and evaluate if it is so that 180° are divisible by it
     let working_degree_segment_size: f64 = degree_segment_size.unwrap_or_else(|| 5.0);
@@ -1705,7 +1709,8 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid input: wind speed segment size: {} m/s.\nThe wind speed segment size must be divisible by 2 m/s to ensure compatibility with openCPN polar plugin", working_wind_speed_segment_size)));
     }
 
-    // Init empty polar plot data vector which will have subvectors. Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
+    // Init empty polar plot data vector which will have subvectors. Column 1 is the apparent wind angle, column 2 is the apparent wind speed, column 3 is the vessel speed through water, column 4 is the heading, column 5 is the wind speed (not apparent), column 6 is the wind angle (not apparent), column 7 is the ocean current speed (not apparent), column 8 is the ocean current angle (not apparent).
+    // NOTE CURRENTLY ONLY HAS 4 COLUMNS!!!
     let mut polar_plot_data_vector: Vec<Vec<f64>> = Vec::new();
 
     // Check for interactive terminal for progress bar
@@ -1733,40 +1738,6 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
 
     // Loop through ship_log
     for entry in ship_log {
-        // If filtering by navigational status, check if this entry's navigational status is the correct one
-        if navigation_status_filter.is_some() {
-            // variable that tells us if we need to skip this entry or not
-            let mut skip_this_entry: bool = false;
-
-            // Check if the ship log entry has a navigational status, if not, skip this entry since we are filtering by navigational status
-            if entry.navigation_status.is_some() {
-                // If the navigational status of the ship log entry is different from the filter then skip this entry. Make sure navigation_status is some first
-                if entry.navigation_status.unwrap() != navigation_status_filter.unwrap() {
-                    skip_this_entry = true;
-                }
-            }
-            else {
-                skip_this_entry = true;
-            }
-
-
-            // If we should skip this entry, update the progress bar and continue to next entry
-            if skip_this_entry {
-                // Update progress bar if a progress bar is in use
-                if !(simulation.progress_bar.is_none()) {
-                    // update progress bar
-                    simulation.progress_bar.as_ref().unwrap().inc(1);
-                    // If not interactive terminal, print progressbar manually
-                    if is_interactive_terminal == false {
-                        let eta = time::UtcDateTime::now().saturating_add(time::Duration::new(simulation.progress_bar.as_ref().unwrap().eta().as_secs() as i64, 0)); // What time the simulations will end
-                        println!("Elapsed: {} secs, Steps {}/{}, ETA: {}-{}-{} {}:{}:{}", simulation.progress_bar.as_ref().unwrap().elapsed().as_secs(), simulation.progress_bar.as_ref().unwrap().position(), simulation.progress_bar.as_ref().unwrap().length().unwrap(), eta.year(), eta.month() as u8, eta.day(), eta.hour(), eta.minute(), eta.second());
-                    }   // End if
-                }   // End if
-
-                // Continue to next entry in the ship logs
-                continue;
-            }
-        }
         // Get timestamp
         let timestamp = entry.timestamp;
 
@@ -1871,7 +1842,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         }
 
         // Log apparent wind angle, wind speed and vessel speed to polar plot data vector
-        polar_plot_data_vector.push(vec![apparent_wind.angle, apparent_wind.magnitude, vessel_velocity_through_water.magnitude]);
+        polar_plot_data_vector.push(vec![apparent_wind.angle, apparent_wind.magnitude, vessel_velocity_through_water.magnitude, heading.unwrap(), wind.magnitude, wind.angle, ocean_current.magnitude, ocean_current.angle]);
 
         // Update progress bar if a progress bar is in use
         if !(simulation.progress_bar.is_none()) {
@@ -2198,7 +2169,7 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
 
     // Write the header
     let mut header_vec: Vec<String> = Vec::new();
-    // Column 1 is the apparent wind angle, column 2 is the apparent wind speed and column 3 is the vessel speed through water
+    // Column 1 is the apparent wind angle, column 2 is the apparent wind speed, column 3 is the vessel speed through water, column 4 is the heading, column 5 is the wind speed (not apparent), column 6 is the wind angle (not apparent), column 7 is the ocean current speed (not apparent), column 8 is the ocean current angle (not apparent).
     header_vec.push("AWA [°]".to_string());
     // If knots, format in knots
     if true_if_knots_false_if_meters_per_second {
@@ -2209,6 +2180,11 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
         header_vec.push("AWS [m/s]".to_string());
         header_vec.push("Vessel speed through water [m/s]".to_string());
     }
+    header_vec.push("Heading [°]".to_string());
+    header_vec.push("wind speed [m/s]".to_string());
+    header_vec.push("wind angle [°]".to_string());
+    header_vec.push("ocean current speed [m/s]".to_string());
+    header_vec.push("ocean current angle [°]".to_string());
     
     writer_source_data.write_record(&header_vec)?;
 
@@ -2230,6 +2206,17 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
             record.push(row[1].to_string());
             record.push(row[2].to_string());
         }
+
+        // Add the fourth cell (heading angle)
+        record.push(row[3].to_string());
+
+        // Add wind data to cells 5 and 6
+        record.push(row[4].to_string());
+        record.push(row[5].to_string());
+
+        // Add ocean current data to cells 7 and 8
+        record.push(row[6].to_string());
+        record.push(row[7].to_string());
 
         // Write the record
         writer_source_data.write_record(&record)?;
