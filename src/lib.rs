@@ -639,7 +639,6 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 }
 
 
-
 // Helper functions
 //----------------------------------------------------
 /// Converts a string into an uom::si::f64::Time object
@@ -1960,7 +1959,6 @@ pub fn make_polar_speed_plot_csv(ship_log: Vec<ShipLogEntry>, simulation: &Simul
 
     // TODO See issue https://github.com/G0rocks/marine_vessel_simulator/issues/62
     // Check if standard_data_vector contains any values. If it does not then return error
-    
 
     // Now that the underlying polar plot data is ready, save the results to a csv file
     // Saving the file with the minimum data

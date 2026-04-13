@@ -192,17 +192,21 @@ pub struct Boat {
     pub rudder: Option<Rudder>,
     pub sail: Option<Sail>,
     pub ship_log: Vec<ShipLogEntry>,
+    /// [s/m] https://github.com/G0rocks/marine_vessel_simulator/issues/77
+    pub speed_grade_coefficient: Option<f64>,
     /// The current time for the boat
     pub time_now: time::UtcDateTime,
     /// The true bearing (true as in from north) to the next waypoint
     pub true_bearing: Option<f64>,
-    /// Current velocity of the boat with magnitude and direction
+    /// [m/s]. Current velocity of the boat with magnitude and direction
     pub velocity_current: Option<PhysVec>,
-    /// The average velocity of the boat, only magnitude, take care of your units. Good practice to use the same velocity units everywhere, \[m/s\] recommended.
+    /// [m/s]. The average velocity of the boat, only magnitude, take care of your units. Good practice to use the same velocity units everywhere, \[m/s\] recommended.
     pub velocity_mean: Option<f64>,
-    /// The standard deviation of the velocity of the boat, only magnitude
+    /// [m/s]. The maximum velocity of the boat, a.k.a. "Hull speed", only magnitude, take care of your units. Good practice to use the same velocity units everywhere, \[m/s\] recommended.
+    pub velocity_max: Option<f64>,
+    /// [m/s]. The standard deviation of the velocity of the boat, only magnitude
     pub velocity_std: Option<f64>,
-    /// The width of the vessel
+    /// [m]. The width of the vessel
     pub width: Option<uom::si::f64::Length>,
     /// Preferred side of the boat for the wind to hit
     pub wind_preferred_side: VesselSide,
@@ -238,10 +242,12 @@ impl Boat {
             rudder: None,
             sail: None,
             ship_log: Vec::new(),
+            speed_grade_coefficient: None,
             time_now: UtcDateTime::now(),
             true_bearing: None,
             velocity_current: None,
             velocity_mean: None,
+            velocity_max: None,
             velocity_std: None,
             width: None,
             wind_preferred_side: VesselSide::Starboard,
@@ -335,8 +341,6 @@ impl Boat {
         self.cargo_current = cargo;
     }
 }
-
-
 
 // Implementation of the ShipLogEntry struct
 //----------------------------------------------------

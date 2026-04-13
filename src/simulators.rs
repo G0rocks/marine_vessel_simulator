@@ -21,7 +21,6 @@ pub enum SimMethod {
     // Copernicus_Weather_Forecast,
 }
 
-
 /// Struct for simulation
 #[derive(Debug)]
 pub struct Simulation {
@@ -713,7 +712,14 @@ pub fn sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, start_
         // working_velocity = boat.velocity_mean.unwrap(); // (boat.velocity_current.unwrap() + final_velocity) / 2.0; // working_velocity in meters per second
 
         // Update the current velocity of the boat
-        boat.velocity_current = Some(working_velocity);
+        let test_velocity = match get_vessel_velocity(boat, wind, Some(ocean_current)){
+            Ok(v) => v,
+            Err(e) => panic!("Error calculating vessel velocity: {}", e),
+        };
+        println!("Test velocity: {:?}", test_velocity);
+        // boat.velocity_current = Some(working_velocity);
+        boat.velocity_current = Some(test_velocity);
+
 
         // Calculate drag on hull from working velocity
         //TODO make sure all forces are correct
@@ -916,4 +922,59 @@ pub fn fast_sim_waypoint_mission_weather_data_from_copernicus(boat: &mut Boat, s
 
     // Simulation finished
     return Ok("Simulation completed".to_string());
+}
+
+// Helper functions
+//---------------------------------------------------------------------------------
+/// Function that returns the estimated velocity of the vessel in reference to the Earth. That is ground speed along with direction.
+/// If ocean current is given, assumes that vessel follows current completely before taking wind into account
+// TODO: make the function and use in simulation functions
+pub fn get_vessel_velocity(boat: &Boat, wind: PhysVec, ocean_current: Option<PhysVec>) -> Result<PhysVec, io::Error> {
+    // TODO: Should be able to accomodate multiple types of vessels, currently only works for sail powered ones
+    // Check that boat has heading, if not, return error
+    if boat.heading.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat heading can not be None"));
+    }
+    // Check that boat has velocity max
+    if boat.velocity_max.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat velocity max can not be None"));
+    }
+    // Check that boat has speed grade coefficient
+    if boat.speed_grade_coefficient.is_none() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Boat speed grade coefficient can not be None"));
+    }
+
+    // init velocity
+    let mut vel = PhysVec::new(0.0, 0.0);
+
+    // If ocean current is given, set velocity to be ocean current since we assume that vessel follows current completely
+    if ocean_current.is_some() {
+        vel = ocean_current.unwrap();
+    }
+
+    // Get heading
+    let heading = boat.heading.unwrap();
+
+    // Get awa (apparent wind angle)
+    let awa = wind - vel;
+    // Get aw (apparent wind). Include heading
+    let mut aw = PhysVec::new(awa.magnitude, awa.angle - heading);
+
+    // Make sure the angle is between 0.0 and 360.0 degrees
+    while aw.angle < 0.0 {
+        aw.angle += 360.0;
+    }
+    while aw.angle >= 360.0 {
+        aw.angle -= 360.0;
+    }    
+
+    // Compute vessel velocity through water (vws = vessel water speed, there might be a better more recognised term used by the industry)
+    // Using approximation from https://github.com/G0rocks/marine_vessel_simulator/issues/77
+    let vws = (2.0*boat.velocity_max.unwrap()/std::f64::consts::PI)*boat.speed_grade_coefficient.unwrap()*(aw.magnitude).atan()*(1.0-(aw.angle - std::f64::consts::PI/4.0).cos());
+
+    // Make output speed including ocean current
+    vel = PhysVec::new(vws, heading) + vel;
+
+    // Return vessel velocity
+    Ok(vel)
 }
