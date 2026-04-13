@@ -264,7 +264,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
     let dist_mean: Option<f64>;
     let dist_std: Option<f64>;
 
-    match get_vec_f64_mean_and_std(&speed_vec) {
+    match get_vec_f64_mean_and_std(&speed_vec, true) {
         Ok((mean, std)) => {
             speed_mean = Some(mean);
             speed_std = Some(std);
@@ -275,7 +275,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
             speed_std = None;
         }
     }
-    match get_vec_f64_mean_and_std(&cargo_vec) {
+    match get_vec_f64_mean_and_std(&cargo_vec, true) {
         Ok((mean, std)) => {
             cargo_mean = Some(mean);
             cargo_std = Some(std);
@@ -289,7 +289,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
 
     // Parse travel_time_vec to travel_time_vec_secs
     let travel_time_vec_secs = travel_time_vec.iter().map(|d| d.as_seconds_f64()).collect::<Vec<f64>>();
-    match get_vec_f64_mean_and_std(&travel_time_vec_secs) {
+    match get_vec_f64_mean_and_std(&travel_time_vec_secs, true) {
         Ok((mean, std)) => {
             let mean_secs = mean as i64;
             travel_time_mean = Some(time::Duration::new(mean_secs, ((mean - mean_secs as f64)*1000000000.0) as i32));
@@ -306,8 +306,7 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
     // Find min and max travel times
     travel_time_min = travel_time_vec.iter().min().cloned();
     travel_time_max = travel_time_vec.iter().max().cloned();
-
-    match get_vec_f64_mean_and_std(&dist_vec) {
+    match get_vec_f64_mean_and_std(&dist_vec, true) {
         Ok((mean, std)) => {
             dist_mean = Some(mean);
             dist_std = Some(std);
@@ -919,9 +918,10 @@ pub fn string_to_tons(cargo_string: String) -> Option<f64> {
 
 /// Returns the average and standard deviation of all values in a vector of f64 objects
 /// data_vec: The vector of f64 objects
+/// only_finite_numbers: True if invalid entries should be ignored. Example vector [1, 3, inf, 5] if true then the mean will be 3, if false then the mean will be inf.
 /// # Example:
 /// `let (my_mean, my_std) = get_vec_f64_mean_and_std(&my_vec);`
-pub fn get_vec_f64_mean_and_std(data_vec: &Vec<f64>) -> Result<(f64, f64), io::Error> {
+pub fn get_vec_f64_mean_and_std(data_vec: &Vec<f64>, only_finite_numbers: bool) -> Result<(f64, f64), io::Error> {
     // Validate that the input vector has at least 1 value
     if data_vec.is_empty() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "vector is empty, cannot calculate mean and standard deviation"));
@@ -929,22 +929,39 @@ pub fn get_vec_f64_mean_and_std(data_vec: &Vec<f64>) -> Result<(f64, f64), io::E
     
     // Calculate the mean of the vector
     let mut total: f64 = 0.0;
+    let mut num_points_used: u64 = 0;
 
     // loop through vector, add all values to total
     for value in data_vec {
-        total = total + *value;
+        if only_finite_numbers {
+            if value.is_finite() {
+                total = total + *value;
+                num_points_used += 1;
+            }
+        }
+        else {
+            total = total + *value;
+            num_points_used += 1;
+        }
     }
     // Find mean
-    let vec_mean: f64 = total / data_vec.len() as f64;
+    let vec_mean: f64 = total / (num_points_used as f64);
 
     // Calculate the standard deviation of the speed vector
     let mut variance: f64 = 0.0;
 
     // loop through vector, add all values to variance, then divide by number of values -1 to create variance
     for value in data_vec {
-        variance = variance + (value - vec_mean).powi(2);
+        if only_finite_numbers {
+            if value.is_finite() {
+            variance = variance + (value - vec_mean).powi(2);
+            }
+        }
+        else {
+            variance = variance + (value - vec_mean).powi(2);
+        }
     }
-    variance = variance / ((data_vec.len() - 1) as f64);
+    variance = variance / ((num_points_used - 1) as f64);
 
     // Find standard deviation from variance
     let vec_std: f64 = variance.sqrt();
