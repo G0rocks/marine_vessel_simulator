@@ -174,9 +174,18 @@ pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximi
             Ok(log_entry) => {
                 // Get all values in row as usable data
                 timestamp = string_to_utc_date_time(log_entry.get(0).expect("No timestamp found").to_string());
-                coordinates_initial = string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string());
-                coordinates_current = string_to_point(log_entry.get(2).expect("No initial coordinate found").to_string());
-                coordinates_final = string_to_point(log_entry.get(3).expect("No initial coordinate found").to_string());
+                coordinates_initial = match string_to_point(log_entry.get(1).expect("No initial coordinate found").to_string()) {
+                    Ok(c) => c,
+                    Err(e) => panic!("Error parsing initial coordinates: {}", e),
+                };
+                coordinates_current = match string_to_point(log_entry.get(2).expect("No current coordinate found").to_string()) {
+                    Ok(c) => c,
+                    Err(e) => panic!("Error parsing current coordinates: {}", e),
+                };
+                coordinates_final = match string_to_point(log_entry.get(3).expect("No final coordinate found").to_string()) {
+                    Ok(c) => c,
+                    Err(e) => panic!("Error parsing final coordinates: {}", e),
+                };
                 cargo_on_board_option = match log_entry.get(4).unwrap().to_string().parse() {
                     Ok(cargo) => Some(cargo),
                     Err(_) => None,
@@ -482,7 +491,10 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
         match result {
             Ok(log_entry) => {
                 // Get current coordinates
-                let coordinates_current = string_to_point(log_entry.get(2).expect("No current coordinate found").to_string());
+                let coordinates_current = match string_to_point(log_entry.get(2).expect("No current coordinate found").to_string()){
+                    Ok(c) => c,
+                    Err(e) => panic!("Error parsing current coordinates: {}", e),
+                };
 
                 // Add coordinates to vectors
                 x_vec.push(coordinates_current.x());
@@ -548,7 +560,10 @@ pub fn visualize_ship_logs_and_route(ship_logs_file_path: &str, route_plan_file_
 
     // Add each waypoint
     // TODO: with label to plot
-    let route_plan = load_route_plan(route_plan_file_path);
+    let route_plan = match load_route_plan(route_plan_file_path){
+        Ok(r) => r,
+        Err(e) => panic!("Error loading route plan: {}", e),
+    };
     for leg in &route_plan {
         // Add the start point to the vectors
         x_vec.push(leg.p1.y());
@@ -801,18 +816,29 @@ pub fn month_from_day(day_of_year: u16, year: i32) -> (u8, u16) {
 /// # Example:
 /// `let my_coord: geo::Point = string_to_point("52.5200,13.4050");`
 /// Note that the output is a geo::Point::new(longitude, latitude) but the input string must be in the format of latitude,longitude so the order is reversed
-pub fn string_to_point(coord_string: String) -> geo::Point {
+pub fn string_to_point(coord_string: String) -> Result<geo::Point, io::Error> {
     // Remove all spaces in string
     let coord_str_vec: Vec<&str> = coord_string.trim().split(',').collect();
 
+    // Check if string is empty
+    if coord_str_vec[0].len() == 0 ||coord_str_vec[1].len() == 0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Input coordinate string is empty: {}", coord_string)));
+    }
+
     // Check if the coordinates are valid, should have latitude and longitude
     if coord_str_vec.len() != 2 {
-        panic!("Invalid coordinate format");
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Invalid coordinate format: {}. Should be \"latitude,longitude\"", coord_string)));
     }
 
     // Parse the latitude and longitude as f64
-    let mut latitude: f64 = coord_str_vec[0].trim().parse::<f64>().expect(format!("Invalid latitude: {:?}", coord_str_vec).as_str());
-    let mut longitude: f64 = coord_str_vec[1].trim().parse::<f64>().expect(format!("Invalid longitude: {:?}", coord_str_vec).as_str());
+    let mut latitude: f64 = match coord_str_vec[0].trim().parse::<f64>() {
+        Ok(lat) => lat,
+        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Invalid latitude: {:?}\nInput string: {}\nError: {}\n", coord_str_vec, coord_string, e))),
+    };
+    let mut longitude: f64 = match coord_str_vec[1].trim().parse::<f64>() {
+        Ok(lon) => lon,
+        Err(e) => return Err(io::Error::new(io::ErrorKind::Other, format!("Invalid longitude: {:?}\nInput string: {}\nError: {}\n", coord_str_vec, coord_string, e))),
+    };
 
     // Make sure longitude is between -180° and 360°
     while longitude < -180.0 {
@@ -833,7 +859,8 @@ pub fn string_to_point(coord_string: String) -> geo::Point {
     // Make return point
     let return_point = geo::Point::new(longitude, latitude);
     
-    return return_point;
+    // Return point
+    return Ok(return_point);
 }
 
 /// Calculates the haversine distance between two points and returns the distance in uom::si::f64::Length
@@ -976,7 +1003,7 @@ pub fn get_duration_mean_and_std(duration_vec: &Vec<time::Duration>) ->
 /// file_path: Path to the CSV file
 /// # Example:
 /// `let file_path: &str = "my_route_plan.csv";`
-pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
+pub fn load_route_plan(file_path: &str) -> Result<Vec<SailingLeg>, io::Error> {
     // Read the CSV file
     let mut csv_reader = csv::ReaderBuilder::new()
         .delimiter(b';')
@@ -1006,8 +1033,8 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
 
                 // Make a SailingLeg object
                 let temp_sailing_leg: SailingLeg = SailingLeg {
-                    p1: string_to_point(format!("{},{}", start_lat, start_long)),
-                    p2: string_to_point(format!("{},{}", end_lat, end_long)),
+                    p1: string_to_point(format!("{},{}", start_lat, start_long)).expect("Invalid start coordinates in route plan"),
+                    p2: string_to_point(format!("{},{}", end_lat, end_long)).expect("Invalid end coordinates in route plan"),
                     tacking_width: tacking_width.parse::<f64>().expect("Invalid tacking width"),
                     min_proximity: min_prox.parse::<f64>().expect("Invalid minimum proximity"),
                 };
@@ -1022,7 +1049,7 @@ pub fn load_route_plan(file_path: &str) -> Vec<SailingLeg> {
     }
 
     // Return the route plan
-    return route_plan;
+    return Ok(route_plan);
 }
 
 /// Function that writes the ship logs to a CSV file with the following columns:
