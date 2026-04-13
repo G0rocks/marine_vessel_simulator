@@ -129,6 +129,7 @@ impl std::ops::Sub for PhysVec {
 /// let distance: f64 = 50;
 /// let (speed_mean, speed_std, cargo_mean, cargo_std) = evaluate_cargo_shipping_logs(filename, distance);
 /// ```
+/// TODO: Add error message for when the trip does not reach the destination
 pub fn evaluate_cargo_shipping_logs(file_path: &str, destination_minimum_proximity: f64) ->
     (Option<f64>, Option<f64>,
         Option<f64>, Option<f64>,
@@ -2596,6 +2597,80 @@ pub fn filter_shipping_log_data(input_folder: &String, output_folder: &String, m
     // Return ok
     return Ok(());
 }
+
+/// Function that loops through all the data points in a polar plot source data csv file to find the speed grade coefficient of the vessel.
+/// The speed grade controls how quickly the vessel reaches v_max with increasing wind speed.
+/// v_max is the maximum velocity the vessel can reach (hull speed)
+/// returns the mean k and the standard deviation
+pub fn get_k(source_data_path: &str, vmax: f64) -> Result<(f64, f64), io::Error> {
+    // Check if the file is a .csv file, if not, return -1000.0
+    if !check_file_extension(source_data_path, ".csv") {
+        // Return error
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("File {:?} is not a .csv file. Cannot calculate k value", source_data_path)));
+    }
+
+    // Init k vector
+    let mut k_vec: Vec<f64> = Vec::new();
+
+    // Read the CSV file
+    let mut csv_reader = csv::ReaderBuilder::new()
+        .delimiter(b';')
+        .has_headers(true)
+        .from_path(source_data_path)
+        .expect(format!("Failed to open file: {}\n", source_data_path).as_str());
+
+    // Loop through all lines of file, compute k for each one and add to k_vec
+    for result in csv_reader.records() {
+        match result {
+            Ok(entry) => {
+                // Get AWA [°]
+                let awa: f64 = entry.get(0).unwrap().parse::<f64>().unwrap();
+                // Get AWS [m/s]
+                let aws: f64 = entry.get(1).unwrap().parse::<f64>().unwrap();
+                // Get VWS (Vessel water sped, the speed through water) [m/s]
+                let vws: f64 = entry.get(2).unwrap().parse::<f64>().unwrap();
+                // Get Heading [°]
+                // let heading: f64 = entry.get(3).unwrap().parse::<f64>().unwrap();
+                // Get wind speed [m/s]
+                // let wind_speed: f64 = entry.get(4).unwrap().parse::<f64>().unwrap();
+                // get wind angle [°]
+                // let wind_angle: f64 = entry.get(5).unwrap().parse::<f64>().unwrap();
+                // get ocean current speed [m/s]
+                // let ocean_current_speed: f64 = entry.get(6).unwrap().parse::<f64>().unwrap();
+                // get ocean current angle [°]
+                // let ocean_current_angle: f64 = entry.get(7).unwrap().parse::<f64>().unwrap();
+
+                // compute k
+                let k: f64 = (1.0/aws)*((std::f64::consts::PI * vws)/(2.0*vmax*(1.0 - (awa + (std::f64::consts::PI / 4.0)).cos()))).tan();
+
+                // add k to k_vec
+                k_vec.push(k);
+                },
+            // If there is some error with the result, notify user and continue to the next one
+            Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("Error getting entry from file {:?}: {}", source_data_path, e))),
+        };
+    }
+
+    let k_vec_len: f64 = k_vec.len() as f64;
+
+    // Compute mean k
+    let mut sum_k: f64 = 0.0;
+    for k in k_vec.iter() {
+        sum_k = sum_k + k;
+    }
+    let mean_k: f64 = sum_k / k_vec_len;
+
+    // Compute standard deviation of k
+    let mut sum_k: f64 = 0.0;
+    for k in k_vec.iter() {
+        sum_k = sum_k + (k - mean_k).powi(2);
+    }
+    let std_k: f64 = (sum_k / (k_vec_len-1.0)).sqrt();
+
+    // Return vmax
+    return Ok((mean_k, std_k));
+}
+
 
 
 // Set up tests here
