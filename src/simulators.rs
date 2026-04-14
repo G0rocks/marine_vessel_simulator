@@ -955,10 +955,9 @@ pub fn get_vessel_velocity(boat: &Boat, wind: PhysVec, ocean_current: Option<Phy
     // Get heading
     let heading = boat.heading.unwrap();
 
-    // Get awa (apparent wind angle)
-    let awa = wind - vel;
     // Get aw (apparent wind). Include heading
-    let mut aw = PhysVec::new(awa.magnitude, awa.angle - heading);
+    let mut aw: PhysVec = wind - vel;
+    aw = PhysVec::new(aw.magnitude, aw.angle - heading);
 
     // Make sure the angle is between 0.0 and 360.0 degrees
     while aw.angle < 0.0 {
@@ -966,11 +965,11 @@ pub fn get_vessel_velocity(boat: &Boat, wind: PhysVec, ocean_current: Option<Phy
     }
     while aw.angle >= 360.0 {
         aw.angle -= 360.0;
-    }    
+    }
 
     // Compute vessel velocity through water (vws = vessel water speed, there might be a better more recognised term used by the industry)
     // Using approximation from https://github.com/G0rocks/marine_vessel_simulator/issues/77
-    let vws = (2.0*boat.velocity_max.unwrap()/std::f64::consts::PI)*boat.speed_grade_coefficient.unwrap()*(aw.magnitude).atan()*(1.0-(aw.angle - std::f64::consts::PI/4.0).cos());
+    let vws: f64 = (2.0*boat.velocity_max.unwrap()/std::f64::consts::PI)*(boat.speed_grade_coefficient.unwrap()*aw.magnitude).atan()*(1.0-(aw.angle - std::f64::consts::PI/4.0).cos());
 
     // Make output speed including ocean current
     vel = PhysVec::new(vws, heading) + vel;
