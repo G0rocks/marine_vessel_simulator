@@ -2672,7 +2672,7 @@ pub fn get_k(source_data_path: &str, vmax: f64) -> Result<(f64, f64), io::Error>
                 // let ocean_current_angle: f64 = entry.get(7).unwrap().parse::<f64>().unwrap();
 
                 // compute k
-                let k: f64 = (1.0/aws)*((std::f64::consts::PI * vws)/(2.0*vmax*(1.0 - (awa + (std::f64::consts::PI / 4.0)).cos()))).tan();
+                let k: f64 = (1.0/aws)*((std::f64::consts::PI * vws)/(2.0*vmax*(1.0 - (awa*std::f64::consts::PI/180.0 + (std::f64::consts::PI / 4.0)).cos()))).tan();
 
                 // add k to k_vec
                 k_vec.push(k);
