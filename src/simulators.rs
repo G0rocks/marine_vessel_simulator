@@ -969,7 +969,7 @@ pub fn get_vessel_velocity(boat: &Boat, wind: PhysVec, ocean_current: Option<Phy
 
     // Compute vessel velocity through water (vws = vessel water speed, there might be a better more recognised term used by the industry)
     // Using approximation from https://github.com/G0rocks/marine_vessel_simulator/issues/77
-    let vws: f64 = (2.0*boat.velocity_max.unwrap()/std::f64::consts::PI)*(boat.speed_grade_coefficient.unwrap()*aw.magnitude).atan()*(1.0-(aw.angle - std::f64::consts::PI/4.0).cos());
+    let vws: f64 = (2.0*boat.velocity_max.unwrap()/std::f64::consts::PI)*(boat.speed_grade_coefficient.unwrap()*aw.magnitude).atan()*(1.0-(aw.angle*std::f64::consts::PI/180.0 - std::f64::consts::PI/4.0).cos());
 
     // Make output speed including ocean current
     vel = PhysVec::new(vws, heading) + vel;
